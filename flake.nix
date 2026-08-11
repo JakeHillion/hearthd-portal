@@ -116,9 +116,15 @@
         hearthd-portal = mkGradle {
           pname = "hearthd-portal";
           gradleBuildTask = "assembleDebug";
-          # revCount is monotonic per branch and present on any clean checkout
-          # (CI uses fetch-depth: 0). A dirty local tree lacks it → placeholders.
-          versionCode = self.revCount or 1;
+          # versionCode is the tip's committer time (seconds since 2020), which
+          # like revCount is intrinsic to the revision — no --impure, no external
+          # counter. Time rather than height so it moves on amend/squash, not just
+          # on new commits, and so both channels share one monotonic axis (mixing
+          # scales would strand a device on whichever channel numbered higher).
+          # The 2020 epoch keeps it ~2e8 today, an order of magnitude under the
+          # 2^31 / Play 2.1e9 ceilings (raw epoch seconds would hit them ~2038).
+          # A dirty local tree lacks `rev` → placeholders.
+          versionCode = if self ? rev then self.lastModified - 1577836800 else 1;
           versionName = "0.1.0+${self.shortRev or "dirty"}";
           installPhase = ''
             runHook preInstall

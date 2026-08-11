@@ -39,7 +39,15 @@
         # depends on the other: a lint failure never blocks the APK, and they
         # build/cache independently. Both replay the same deps.json.
         mkGradle =
-          { pname, gradleBuildTask, installPhase }:
+          {
+            pname,
+            gradleBuildTask,
+            installPhase,
+            # Stamped into the APK build only (see gradleFlags). null → the build
+            # falls back to the dev placeholders in app/build.gradle.kts.
+            versionCode ? null,
+            versionName ? null,
+          }:
           pkgs.stdenv.mkDerivation (finalAttrs: {
             inherit pname version installPhase gradleBuildTask;
 
@@ -85,6 +93,13 @@
               # (wrong ELF interpreter). Use the autopatched aapt2 from the
               # Nix-provided build-tools instead.
               "-Pandroid.aapt2FromMavenOverride=${sdkRoot}/build-tools/35.0.0/aapt2"
+            ]
+            # Stamp the version from the flake's own git input, so no source
+            # mutation or --impure is needed. Only the APK build gets it; the
+            # lint derivation stays version-independent.
+            ++ pkgs.lib.optionals (versionCode != null) [
+              "-Pportal.versionCode=${toString versionCode}"
+              "-Pportal.versionName=${versionName}"
             ];
 
             # nixpkgs' default dependency-fetch task (nixDownloadDeps) resolves
@@ -101,6 +116,10 @@
         hearthd-portal = mkGradle {
           pname = "hearthd-portal";
           gradleBuildTask = "assembleDebug";
+          # revCount is monotonic per branch and present on any clean checkout
+          # (CI uses fetch-depth: 0). A dirty local tree lacks it → placeholders.
+          versionCode = self.revCount or 1;
+          versionName = "0.1.0+${self.shortRev or "dirty"}";
           installPhase = ''
             runHook preInstall
             mkdir -p "$out"

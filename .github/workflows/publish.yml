@@ -1,0 +1,62 @@
+name: Publish
+
+# The impure, secret-bearing release path, independent of CI. It builds its own
+# APK (a cache hit from CI's identical build when available), so it has no
+# dependency on the CI workflow — only its own trigger.
+on:
+  push:
+    branches: [main, canary]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+      SIGNING_KEYSTORE_PASSWORD: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
+      SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+      R2_ENDPOINT: https://28e45df51086264c6d9cf2b5e6ecc190.r2.cloudflarestorage.com
+      R2_BUCKET: hearthd-assets
+      PUBLIC_BASE: https://assets.hearthd.dev
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+    steps:
+      - uses: actions/checkout@v4
+        # Full history so the canary safety gate can resolve origin/main.
+        with:
+          fetch-depth: 0
+
+      - name: Determine stream & canary safety gate
+        id: stream
+        run: |
+          stream="$GITHUB_REF_NAME"
+          # Never ship a canary that's missing commits already on main.
+          if [ "$stream" = "canary" ] && ! git merge-base --is-ancestor origin/main HEAD; then
+            echo "::error::canary is not a descendant of main; refusing to publish."
+            exit 1
+          fi
+          echo "stream=$stream" >> "$GITHUB_OUTPUT"
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Set up Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: Build & sign the release APK
+        run: |
+          out=$(nix build .#hearthd-portal --no-link --print-out-paths)
+          mkdir -p artifacts
+          cp "$out"/*.apk artifacts/
+          chmod -R u+w artifacts
+          apk=$(ls artifacts/*.apk | head -1)
+          nix develop --command bash ci/sign-apk.sh "$apk" "$apk.signed"
+          mv "$apk.signed" "$apk"
+          nix develop --command bash ci/apk-version.sh "$apk" apk-version.env
+
+      - name: Publish to R2
+        run: |
+          set -a; . ./apk-version.env; set +a
+          apk=$(ls artifacts/*.apk | head -1)
+          VERSION_CODE="$versionCode" VERSION_NAME="$versionName" \
+            nix shell nixpkgs#awscli2 --command bash ci/publish.sh "$apk" "${{ steps.stream.outputs.stream }}"

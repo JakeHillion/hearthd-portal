@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">hearthd</string>
     <string name="welcome_message">Welcome to hearthd-portal</string>
+    <string name="version_label">v%1$s · build %2$d</string>
 </resources>

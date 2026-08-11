@@ -1,6 +1,7 @@
 package dev.hearthd.android.portal
 
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,6 +26,14 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Kiosk display: never let the screen sleep while we're showing, and
+        // come up over the keyguard (and wake the panel) so a kiosk that starts
+        // on an asleep or locked Portal is actually visible. minSdk 28 means the
+        // setShowWhenLocked/setTurnScreenOn APIs (27+) are always available.
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        setShowWhenLocked(true)
+        setTurnScreenOn(true)
 
         val settingsRepo = SettingsRepository(applicationContext)
         val controller = UpdateController(applicationContext)

@@ -6,11 +6,16 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import dev.hearthd.android.portal.settings.SettingsRepository
+import dev.hearthd.android.portal.ui.KioskScreen
 import dev.hearthd.android.portal.ui.SettingsScreen
 import dev.hearthd.android.portal.update.UpdateController
 import kotlinx.coroutines.delay
@@ -43,7 +48,18 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    SettingsScreen(settingsRepo, controller)
+                    // The kiosk surface is the root; Settings is reachable from
+                    // its swipe-up tray and returns here on close.
+                    var showSettings by rememberSaveable { mutableStateOf(false) }
+                    if (showSettings) {
+                        SettingsScreen(
+                            settingsRepo = settingsRepo,
+                            controller = controller,
+                            onClose = { showSettings = false },
+                        )
+                    } else {
+                        KioskScreen(onOpenSettings = { showSettings = true })
+                    }
                 }
             }
         }

@@ -46,6 +46,7 @@ import kotlin.math.roundToInt
 fun SettingsScreen(
     settingsRepo: SettingsRepository,
     controller: UpdateController,
+    onClose: () -> Unit,
 ) {
     val settings by settingsRepo.settings.collectAsStateWithLifecycle(initialValue = UpdateSettings())
     val ui by controller.state.collectAsStateWithLifecycle()
@@ -53,6 +54,14 @@ fun SettingsScreen(
 
     Row(modifier = Modifier.fillMaxSize()) {
         NavigationRail {
+            // Back to the kiosk surface. With the system bars hidden in kiosk
+            // mode this is the way out of settings.
+            NavigationRailItem(
+                selected = false,
+                onClick = onClose,
+                icon = { Text("←") },
+                label = { Text(stringResource(R.string.settings_close)) },
+            )
             NavigationRailItem(
                 selected = true,
                 onClick = {},

@@ -29,6 +29,22 @@ Or build it yourself (debug-signed): `nix build .#hearthd-portal`.
 >
 >     adb uninstall dev.hearthd.android.portal
 
+### Run as the kiosk (home app)
+
+To make the Portal boot straight into hearthd and stay there, set it as the
+device's home (launcher) app. The Portal exposes no home-app picker in its UI,
+but it does honour the app's `HOME` intent-filter, so you can point the system
+at it over ADB — no device owner needed:
+
+    adb shell cmd package set-home-activity dev.hearthd.android.portal/.MainActivity
+
+After this the Home button lands on hearthd, and the device launches straight
+into it on boot (confirmed on a Portal — no lock screen in the way, at least on
+a device with no screen lock set). To hand control back to the stock Portal
+launcher:
+
+    adb shell cmd package set-home-activity com.facebook.alohaapps.launcher/com.facebook.aloha.app.home.touch.HomeActivity
+
 ## Automatic updates
 
 The app can update itself in place from its release channel (opt in under

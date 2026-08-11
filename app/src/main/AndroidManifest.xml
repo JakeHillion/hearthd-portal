@@ -19,6 +19,16 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Register as a home app. Where the device allows it, this is the
+                 strongest non-privileged kiosk lever: the system launches us on
+                 boot, and Home returns here instead of to the stock launcher.
+                 A locked-down Portal may not let us be selected as home; the
+                 LAUNCHER filter above keeps the app reachable either way. -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
 
         <!-- Receives PackageInstaller session status (e.g. the "confirm install"

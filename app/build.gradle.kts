@@ -13,8 +13,10 @@ android {
         // Portal (2nd gen) ships on Android 9 (API 28).
         minSdk = 28
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // Stamped by CI from the flake's git revCount (see flake.nix). Local or
+        // dirty builds fall back to these dev placeholders.
+        versionCode = (project.findProperty("portal.versionCode") as String?)?.toInt() ?: 1
+        versionName = (project.findProperty("portal.versionName") as String?) ?: "0.1.0"
     }
 
     buildTypes {
@@ -38,6 +40,8 @@ android {
 
     buildFeatures {
         compose = true
+        // Exposes VERSION_NAME / VERSION_CODE to the app (shown on screen).
+        buildConfig = true
     }
 }
 

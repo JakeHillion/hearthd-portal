@@ -10,22 +10,36 @@
 
 ## Install
 
-Download the latest `hearthd-portal-apk` from the
-[Actions](https://github.com/JakeHillion/hearthd-portal/actions) tab, or with the
-GitHub CLI:
+Grab the latest `main` build from R2 (see [Release channels](#release-channels))
+and sideload it with the Portal connected over USB in ADB mode:
 
-    gh run download -n hearthd-portal-apk
-
-Then, with the Portal connected over USB in ADB mode:
-
-    adb install -r hearthd-portal-*-debug.apk
+    url=$(curl -fsSL https://assets.hearthd.dev/android/portal/main.json | jq -r .apkUrl)
+    curl -fsSL "$url" -o hearthd-portal.apk
+    adb install -r hearthd-portal.apk
     adb shell am start -n dev.hearthd.android.portal/.MainActivity
 
+Or build it yourself (debug-signed): `nix build .#hearthd-portal`.
+
 > [!NOTE]
-> CI re-signs the APK with a stable release key (`ci/sign-apk.sh`) so the app can
-> be updated in place later. Locally built APKs (`nix build .#hearthd-portal`)
-> are still debug-signed with a throwaway key. Because Android refuses to update
+> The published APK is release-signed with a stable key (the `publish` CI job
+> runs `ci/sign-apk.sh`) so the app can update in place later. Locally built
+> APKs are debug-signed with a throwaway key. Because Android refuses to update
 > an app across signing keys, switching a device between a locally built (debug)
-> and a CI (release) APK requires uninstalling first:
+> and a published (release) APK requires uninstalling first:
 >
 >     adb uninstall dev.hearthd.android.portal
+
+## Release channels
+
+Pushes to `main` and `canary` publish the signed APK and a per-stream manifest to
+R2, served at `assets.hearthd.dev`:
+
+    https://assets.hearthd.dev/android/portal/main.json
+    https://assets.hearthd.dev/android/portal/canary.json
+
+Each manifest points at a content-addressed APK
+(`android/portal/<sha256>.apk`) and carries its `versionCode`, `versionName`,
+`sha256`, and originating `gitSha`. The `versionCode` is the git commit count
+(`revCount`), and the running build is shown on the app's home screen. Canary
+only publishes when it contains everything on `main`. The in-app auto-updater
+that consumes these lands in a follow-up.

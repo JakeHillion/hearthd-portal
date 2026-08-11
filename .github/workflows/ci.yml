@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Set up Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
+      # Builds the APK and runs Android Lint (both are flake checks).
+      - name: nix flake check
+        run: nix flake check --print-build-logs
+
+      # The APK was already built by the check above, so this just fetches it
+      # from the store. Copy out of the read-only store for upload-artifact.
+      - name: Collect APK
+        run: |
+          out=$(nix build .#hearthd-portal --no-link --print-out-paths)
+          mkdir -p artifacts
+          cp "$out"/*.apk artifacts/
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: hearthd-portal-debug-apk
+          path: artifacts/*.apk
+          if-no-files-found: error

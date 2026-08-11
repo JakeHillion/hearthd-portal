@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Compose drives the actual UI theming (MaterialTheme). This XML theme only
+      needs to give the Activity a sane, action-bar-free window before Compose
+      takes over. Uses a framework theme to avoid extra resource dependencies.
+    -->
+    <style name="Theme.HearthdPortal" parent="@android:style/Theme.Material.Light.NoActionBar" />
+</resources>

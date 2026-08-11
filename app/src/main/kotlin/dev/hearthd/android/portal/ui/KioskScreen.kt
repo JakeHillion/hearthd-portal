@@ -7,14 +7,13 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -29,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.hearthd.android.portal.R
@@ -38,18 +36,15 @@ import dev.hearthd.android.portal.R
  * The kiosk surface — what the Portal shows in normal operation. Deliberately
  * trivial for now (just a label); real content comes later.
  *
- * Kiosk mode will hide the system bars, so operator controls can't live behind
- * the nav bar. Instead a swipe down from the top edge drops a tray — just a
- * Settings entry today, with room to grow. The gesture comes from the top
- * because the Portal's own system controls own the bottom edge; a bottom grab
- * strip would fight them and lose.
+ * Kiosk mode hides the system bars, so operator controls can't live behind the
+ * nav bar. A long-press in the top-right corner drops a tray — just a Settings
+ * entry today, with room to grow. It's a hold rather than a swipe because the
+ * hidden system bars are themselves revealed by an edge swipe; a deliberate
+ * corner press won't be mistaken for that, or triggered by a stray touch.
  */
 @Composable
 fun KioskScreen(onOpenSettings: () -> Unit) {
     var trayVisible by remember { mutableStateOf(false) }
-    // How far the drag must travel downward before the tray opens, so a stray
-    // touch on the top edge doesn't trigger it.
-    val openThresholdPx = with(LocalDensity.current) { 32.dp.toPx() }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Text(
@@ -58,20 +53,14 @@ fun KioskScreen(onOpenSettings: () -> Unit) {
             modifier = Modifier.align(Alignment.Center),
         )
 
-        // Invisible grab strip along the top edge. Nothing is drawn until a
-        // drag travels far enough downward, keeping the surface clean.
+        // Invisible hold target in the top-right corner. Nothing is drawn,
+        // keeping the surface clean; a long-press opens the tray.
         Box(
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .height(48.dp)
+                .align(Alignment.TopEnd)
+                .size(72.dp)
                 .pointerInput(Unit) {
-                    var travel = 0f
-                    detectVerticalDragGestures(
-                        onDragStart = { travel = 0f },
-                        onVerticalDrag = { _, delta -> travel += delta },
-                        onDragEnd = { if (travel >= openThresholdPx) trayVisible = true },
-                    )
+                    detectTapGestures(onLongPress = { trayVisible = true })
                 },
         )
 

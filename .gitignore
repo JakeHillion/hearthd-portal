@@ -1,0 +1,18 @@
+# Gradle
+.gradle/
+build/
+local.properties
+
+# Nix
+result
+result-*
+
+# Android
+*.apk
+*.ap_
+*.keystore
+
+# IDE / editors
+.idea/
+*.iml
+.kotlin/

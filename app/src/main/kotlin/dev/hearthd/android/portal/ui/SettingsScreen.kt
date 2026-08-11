@@ -1,5 +1,8 @@
 package dev.hearthd.android.portal.ui
 
+import android.content.Intent
+import android.os.Build
+import android.provider.Settings
 import android.text.format.DateUtils
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -22,8 +25,12 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -41,7 +48,10 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlin.math.roundToInt
 
-/** Root settings screen: a navigation rail with sections, "Updates" for now. */
+/** Sections shown in the settings navigation rail. */
+private enum class SettingsSection { UPDATES, DEVICE_INFO }
+
+/** Root settings screen: a navigation rail with sections. */
 @Composable
 fun SettingsScreen(
     settingsRepo: SettingsRepository,
@@ -51,6 +61,7 @@ fun SettingsScreen(
     val settings by settingsRepo.settings.collectAsStateWithLifecycle(initialValue = UpdateSettings())
     val ui by controller.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+    var section by rememberSaveable { mutableStateOf(SettingsSection.UPDATES) }
 
     Row(modifier = Modifier.fillMaxSize()) {
         NavigationRail {
@@ -63,20 +74,29 @@ fun SettingsScreen(
                 label = { Text(stringResource(R.string.settings_close)) },
             )
             NavigationRailItem(
-                selected = true,
-                onClick = {},
+                selected = section == SettingsSection.UPDATES,
+                onClick = { section = SettingsSection.UPDATES },
                 icon = { Text("↻") },
                 label = { Text(stringResource(R.string.settings_updates)) },
             )
+            NavigationRailItem(
+                selected = section == SettingsSection.DEVICE_INFO,
+                onClick = { section = SettingsSection.DEVICE_INFO },
+                icon = { Text("ⓘ") },
+                label = { Text(stringResource(R.string.settings_device_info)) },
+            )
         }
-        UpdatesPane(
-            settings = settings,
-            ui = ui,
-            onEnabledChange = { scope.launch { settingsRepo.setEnabled(it) } },
-            onChannelChange = { scope.launch { settingsRepo.setChannel(it) } },
-            onIntervalChange = { scope.launch { settingsRepo.setIntervalMinutes(it) } },
-            onCheckNow = { scope.launch { controller.check(settings.channel) } },
-        )
+        when (section) {
+            SettingsSection.UPDATES -> UpdatesPane(
+                settings = settings,
+                ui = ui,
+                onEnabledChange = { scope.launch { settingsRepo.setEnabled(it) } },
+                onChannelChange = { scope.launch { settingsRepo.setChannel(it) } },
+                onIntervalChange = { scope.launch { settingsRepo.setIntervalMinutes(it) } },
+                onCheckNow = { scope.launch { controller.check(settings.channel) } },
+            )
+            SettingsSection.DEVICE_INFO -> DeviceInfoPane()
+        }
     }
 }
 
@@ -159,6 +179,47 @@ private fun UpdatesPane(
         OutlinedButton(onClick = onCheckNow) {
             Text(stringResource(R.string.update_check_now))
         }
+    }
+}
+
+@Composable
+private fun DeviceInfoPane() {
+    val context = LocalContext.current
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+    ) {
+        Text(stringResource(R.string.settings_device_info), style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.height(16.dp))
+
+        InfoRow(stringResource(R.string.device_model), "${Build.MANUFACTURER} ${Build.MODEL}")
+        InfoRow(stringResource(R.string.device_android), "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+        InfoRow(
+            stringResource(R.string.device_app_version),
+            stringResource(R.string.version_label, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
+        )
+        Spacer(Modifier.height(24.dp))
+
+        // Escape hatch out of the kiosk into the native Settings app — the only
+        // way to reach Developer options and re-enable ADB on a fresh machine.
+        Text(
+            stringResource(R.string.device_settings_summary),
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(onClick = { context.startActivity(Intent(Settings.ACTION_SETTINGS)) }) {
+            Text(stringResource(R.string.device_open_settings))
+        }
+    }
+}
+
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Text(label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        Text(value, style = MaterialTheme.typography.bodyMedium)
     }
 }
 

@@ -61,6 +61,16 @@
             ANDROID_HOME = sdkRoot;
             ANDROID_SDK_ROOT = sdkRoot;
 
+            # Lint's Google Play SDK Index check fetches a rolling snapshot.gz
+            # from dl.google.com during lint-model generation. That blob has no
+            # stable content hash, so the recording proxy pins a moving target
+            # into deps.json and the build stops reproducing. This env var (read
+            # by lint's GooglePlaySdkIndex) overrides the snapshot base URL; a
+            # non-network file:// URL that does not exist makes the fetch fail
+            # cleanly, so lint falls back to the offline snapshot bundled inside
+            # the (already-pinned) AGP jar. Nothing mutable enters the lockfile.
+            SDK_INDEX_TEST_BASE_URL = "file:///var/empty/hearthd-no-play-sdk-index/";
+
             # AGP needs a writable "android home" for its prefs/analytics; the
             # sandbox HOME is read-only, so redirect it into the build tree. This
             # runs for both the dependency-fetch update and the real build.

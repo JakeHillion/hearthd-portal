@@ -7,6 +7,12 @@
     <string name="kiosk_open_settings">⚙  Settings</string>
     <string name="settings_close">Home</string>
     <string name="settings_updates">Updates</string>
+    <string name="settings_device_info">Device</string>
+    <string name="device_model">Model</string>
+    <string name="device_android">Android</string>
+    <string name="device_app_version">Portal version</string>
+    <string name="device_settings_summary">Opens the device\'s native Android settings — the way in to Developer options to re-enable ADB.</string>
+    <string name="device_open_settings">Open Android settings</string>
     <string name="update_auto">Automatic updates</string>
     <string name="update_auto_summary">Check the release channel and install newer builds. Off by default; nothing is fetched until enabled.</string>
     <string name="update_channel">Channel</string>

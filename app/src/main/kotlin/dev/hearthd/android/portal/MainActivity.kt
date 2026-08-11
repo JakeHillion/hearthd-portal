@@ -3,63 +3,49 @@ package dev.hearthd.android.portal
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import dev.hearthd.android.portal.settings.SettingsRepository
+import dev.hearthd.android.portal.ui.SettingsScreen
+import dev.hearthd.android.portal.update.UpdateController
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    WelcomeScreen()
+
+        val settingsRepo = SettingsRepository(applicationContext)
+        val controller = UpdateController(applicationContext)
+
+        // The update loop lives here, scoped to the foreground: it only runs
+        // while the app is at least STARTED and the user has opted in. Off
+        // screen or disabled, it does nothing and never touches the network.
+        // collectLatest restarts the loop whenever settings change.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                settingsRepo.settings.collectLatest { settings ->
+                    if (!settings.enabled) return@collectLatest
+                    while (true) {
+                        controller.check(settings.channel)
+                        delay(settings.intervalMinutes.toLong() * 60_000L)
+                    }
                 }
             }
         }
-    }
-}
 
-@Composable
-fun WelcomeScreen() {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(
-            text = stringResource(id = R.string.welcome_message),
-            style = MaterialTheme.typography.headlineMedium,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        // The build number lets us confirm at a glance which version is running
-        // once auto-updates land.
-        Text(
-            text = stringResource(
-                id = R.string.version_label,
-                BuildConfig.VERSION_NAME,
-                BuildConfig.VERSION_CODE,
-            ),
-            style = MaterialTheme.typography.bodySmall,
-        )
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun WelcomeScreenPreview() {
-    MaterialTheme {
-        WelcomeScreen()
+        setContent {
+            MaterialTheme {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    SettingsScreen(settingsRepo, controller)
+                }
+            }
+        }
     }
 }

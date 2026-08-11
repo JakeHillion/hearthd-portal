@@ -29,6 +29,34 @@ Or build it yourself (debug-signed): `nix build .#hearthd-portal`.
 >
 >     adb uninstall dev.hearthd.android.portal
 
+## Automatic updates
+
+The app can update itself in place from its release channel (opt in under
+**Settings → Updates**). On a stock Portal this needs one extra bit of device
+setup, because Portal firmware ships a system app verifier
+(`com.facebook.appverifier`) that silently rejects any install whose signing
+certificate isn't on Meta's internal allowlist. Our release key isn't, so the
+system "confirm install" dialog appears but pressing **Install** does nothing —
+the verifier vetoes the `PackageInstaller` session after you confirm.
+
+To allow in-app updates, disable package verification on the device over ADB:
+
+    adb shell settings put global package_verifier_enable 0
+
+This persists across reboots. It only affects installs that go through the
+package verifier — ADB sideloads (`adb install`) are already exempt
+(`verifier_verify_adb_installs` defaults to `0`), which is why the manual
+install above works regardless. To restore the verifier:
+
+    adb shell settings put global package_verifier_enable 1
+
+> [!NOTE]
+> This is a per-device change and can't be shipped in the app: Portal blocks
+> the device-owner path that would otherwise grant silent installs
+> (`dpm set-device-owner` is refused once the device has accounts, which every
+> provisioned Portal does). Disabling the verifier is currently the only way to
+> let a non-Meta-signed build update itself.
+
 ## Release channels
 
 Pushes to `main` and `canary` publish the signed APK and a per-stream manifest to

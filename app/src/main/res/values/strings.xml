@@ -3,4 +3,10 @@
     <string name="app_name">hearthd</string>
     <string name="welcome_message">Welcome to hearthd-portal</string>
     <string name="version_label">v%1$s · build %2$d</string>
+    <string name="settings_updates">Updates</string>
+    <string name="update_auto">Automatic updates</string>
+    <string name="update_auto_summary">Check the release channel and install newer builds. Off by default; nothing is fetched until enabled.</string>
+    <string name="update_channel">Channel</string>
+    <string name="update_interval">Check every</string>
+    <string name="update_check_now">Check now</string>
 </resources>

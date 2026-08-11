@@ -1,6 +1,11 @@
 package dev.hearthd.android.portal.ui
 
+import android.content.Context
 import android.content.Intent
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Build
 import android.provider.Settings
 import android.text.format.DateUtils
@@ -24,8 +29,10 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -49,7 +56,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import kotlin.math.roundToInt
 
 /** Sections shown in the settings navigation rail. */
-private enum class SettingsSection { UPDATES, DEVICE_INFO }
+private enum class SettingsSection { UPDATES, DEVICE_INFO, SENSORS }
 
 /** Root settings screen: a navigation rail with sections. */
 @Composable
@@ -85,6 +92,15 @@ fun SettingsScreen(
                 icon = { Text("ⓘ") },
                 label = { Text(stringResource(R.string.settings_device_info)) },
             )
+            // Debug-only: sensor probe. Not user-facing polish — kept for
+            // capturing what this hardware exposes (esp. proximity, which we
+            // want to drive display-off in an empty room).
+            NavigationRailItem(
+                selected = section == SettingsSection.SENSORS,
+                onClick = { section = SettingsSection.SENSORS },
+                icon = { Text("◎") },
+                label = { Text("Sensors") },
+            )
         }
         when (section) {
             SettingsSection.UPDATES -> UpdatesPane(
@@ -96,6 +112,7 @@ fun SettingsScreen(
                 onCheckNow = { scope.launch { controller.check(settings.channel) } },
             )
             SettingsSection.DEVICE_INFO -> DeviceInfoPane()
+            SettingsSection.SENSORS -> SensorsPane()
         }
     }
 }
@@ -213,6 +230,88 @@ private fun DeviceInfoPane() {
             Text(stringResource(R.string.device_open_settings))
         }
     }
+}
+
+/**
+ * Debug sensor probe. Lists every sensor the platform exposes and shows live
+ * readings for proximity and ambient light. The proximity listener is the same
+ * plumbing we'd use to switch the display off in an empty room — this pane is
+ * where we confirm the sensor exists and see what it actually reports.
+ */
+@Composable
+private fun SensorsPane() {
+    val context = LocalContext.current
+    val sm = remember { context.getSystemService(Context.SENSOR_SERVICE) as SensorManager }
+    val all = remember { sm.getSensorList(Sensor.TYPE_ALL) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+    ) {
+        Text("Sensors (debug)", style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.height(16.dp))
+
+        Text("Live readings", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+        LiveSensorRow(sm, Sensor.TYPE_PROXIMITY, "Proximity")
+        LiveSensorRow(sm, Sensor.TYPE_LIGHT, "Ambient light")
+        Spacer(Modifier.height(24.dp))
+
+        Text("All sensors (${all.size})", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+        if (all.isEmpty()) {
+            Text("No sensors reported by this device.", style = MaterialTheme.typography.bodySmall)
+        }
+        all.forEach { s ->
+            Text(
+                "${s.name}\n  type=${s.type} vendor=${s.vendor} max=${s.maximumRange} res=${s.resolution}",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(vertical = 4.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Registers a listener on [type]'s default sensor while composed and renders its
+ * latest value. Unregisters on dispose so we don't hold the sensor open once the
+ * pane leaves the screen.
+ */
+@Composable
+private fun LiveSensorRow(sm: SensorManager, type: Int, label: String) {
+    val sensor = remember(type) { sm.getDefaultSensor(type) }
+    var values by remember(type) { mutableStateOf<FloatArray?>(null) }
+
+    DisposableEffect(sensor) {
+        if (sensor == null) return@DisposableEffect onDispose { }
+        val listener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent) {
+                values = event.values.copyOf()
+            }
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+        }
+        sm.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_UI)
+        onDispose { sm.unregisterListener(listener) }
+    }
+
+    val text = when {
+        sensor == null -> "not present"
+        values == null -> "waiting…"
+        else -> {
+            val v = values!!
+            val raw = v.joinToString(", ") { it.toString() }
+            // Proximity is typically binary: values[0] < maxRange means "near".
+            if (type == Sensor.TYPE_PROXIMITY && v.isNotEmpty()) {
+                val near = v[0] < sensor.maximumRange
+                "$raw  (${if (near) "NEAR" else "FAR"}, max ${sensor.maximumRange})"
+            } else {
+                "$raw  (max ${sensor.maximumRange})"
+            }
+        }
+    }
+    InfoRow(label, text)
 }
 
 @Composable

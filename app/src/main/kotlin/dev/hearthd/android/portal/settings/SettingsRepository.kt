@@ -24,6 +24,9 @@ class SettingsRepository(private val context: Context) {
         val wakeEnabled = booleanPreferencesKey("wake_enabled")
         val wakeModel = stringPreferencesKey("wake_model")
         val wakeThreshold = floatPreferencesKey("wake_threshold")
+        val voiceEnabled = booleanPreferencesKey("voice_enabled")
+        val voiceBaseUrl = stringPreferencesKey("voice_base_url")
+        val voicePipeline = stringPreferencesKey("voice_pipeline")
     }
 
     val settings: Flow<UpdateSettings> = context.dataStore.data.map { prefs ->
@@ -60,4 +63,21 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setWakeThreshold(threshold: Float) =
         context.dataStore.edit { it[Keys.wakeThreshold] = threshold }
+
+    val voice: Flow<VoiceSettings> = context.dataStore.data.map { prefs ->
+        VoiceSettings(
+            enabled = prefs[Keys.voiceEnabled] ?: false,
+            baseUrl = prefs[Keys.voiceBaseUrl] ?: "",
+            pipelineId = prefs[Keys.voicePipeline] ?: "",
+        )
+    }
+
+    suspend fun setVoiceEnabled(value: Boolean) =
+        context.dataStore.edit { it[Keys.voiceEnabled] = value }
+
+    suspend fun setVoiceBaseUrl(url: String) =
+        context.dataStore.edit { it[Keys.voiceBaseUrl] = url.trim() }
+
+    suspend fun setVoicePipeline(id: String) =
+        context.dataStore.edit { it[Keys.voicePipeline] = id.trim() }
 }

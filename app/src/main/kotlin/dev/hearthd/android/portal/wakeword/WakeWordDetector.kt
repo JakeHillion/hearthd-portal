@@ -7,6 +7,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import ai.onnxruntime.OrtEnvironment
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,6 +54,16 @@ class WakeWordDetector(private val appContext: Context) {
     // buffer so a detection is never dropped if the collector is momentarily busy.
     private val _events = MutableSharedFlow<WakeWordDetection>(extraBufferCapacity = 4)
     val events: SharedFlow<WakeWordDetection> = _events.asSharedFlow()
+
+    // Every captured mic frame, published for the voice pipeline to stream after
+    // a detection. Hot and lossy (drops oldest under backpressure) so wake-word
+    // scoring is never held up by a slow consumer; nobody collects it unless a
+    // voice turn is running.
+    private val _audioFrames = MutableSharedFlow<ShortArray>(
+        extraBufferCapacity = 16,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val audioFrames: SharedFlow<ShortArray> = _audioFrames.asSharedFlow()
 
     fun markDisabled() = _state.update { WakeWordUiState(status = WakeWordStatus.DISABLED) }
 
@@ -113,6 +124,9 @@ class WakeWordDetector(private val appContext: Context) {
             var lastFiredMs = 0L
             while (currentCoroutineContext().isActive) {
                 if (!readFully(record, chunk)) break // stopped or errored
+
+                // Publish a copy for the voice pipeline (chunk is reused below).
+                _audioFrames.tryEmit(chunk.copyOf())
 
                 val score = pipeline.process(chunk)
                 val now = System.currentTimeMillis()

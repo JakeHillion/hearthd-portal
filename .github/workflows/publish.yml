@@ -6,6 +6,14 @@ name: Publish
 on:
   push:
     branches: [main, canary]
+  # Nightly promotion: drag canary forward to main's current build so canary can
+  # never silently lag behind, even if no one pushes it. A scheduled run checks
+  # out the default branch (main), so the build is main's HEAD; the stream step
+  # below republishes it as canary. Backed by the same "canary ≥ main" gate.
+  # Off-peak minute on purpose: scheduled runs share a queue and the top of the
+  # hour is the most contended slot, so an odd minute starts closer to on-time.
+  schedule:
+    - cron: "17 3 * * *" # 03:17 UTC, early morning.
 
 jobs:
   publish:
@@ -29,7 +37,12 @@ jobs:
       - name: Determine stream & canary safety gate
         id: stream
         run: |
-          stream="$GITHUB_REF_NAME"
+          if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
+            # Nightly run: promote main's build to the canary stream.
+            stream="canary"
+          else
+            stream="$GITHUB_REF_NAME"
+          fi
           # Never ship a canary that's missing commits already on main.
           if [ "$stream" = "canary" ] && ! git merge-base --is-ancestor origin/main HEAD; then
             echo "::error::canary is not a descendant of main; refusing to publish."

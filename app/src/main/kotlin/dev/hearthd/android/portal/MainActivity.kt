@@ -9,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -23,6 +24,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import dev.hearthd.android.portal.dashboard.DashboardController
+import dev.hearthd.android.portal.dashboard.LightController
+import dev.hearthd.android.portal.dashboard.LocalLightCommander
+import dev.hearthd.android.portal.settings.HearthdSettings
 import dev.hearthd.android.portal.settings.SettingsRepository
 import dev.hearthd.android.portal.settings.VoiceSettings
 import dev.hearthd.android.portal.ui.KioskScreen
@@ -50,6 +54,11 @@ class MainActivity : ComponentActivity() {
             micPermission.value = granted
         }
 
+    // Latest hearthd control settings, tracked so the light commander always
+    // sends to the current URL (or drops the command when unconfigured).
+    @Volatile
+    private var hearthdSettings = HearthdSettings()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -65,6 +74,16 @@ class MainActivity : ComponentActivity() {
         val wakeWord = WakeWordDetector(applicationContext)
         val voice = VoiceController(lifecycleScope)
         val dashboard = DashboardController()
+        // Light control (write path): commands go straight to hearthd, then nudge
+        // a dashboard re-poll so the change is confirmed without waiting a cycle.
+        val lightCommander = LightController(
+            scope = lifecycleScope,
+            settings = { hearthdSettings },
+            onCommandSent = { dashboard.refreshNow() },
+        )
+        lifecycleScope.launch {
+            settingsRepo.hearthd.collect { hearthdSettings = it }
+        }
 
         // The update loop lives here, scoped to the foreground: it only runs
         // while the app is at least STARTED and the user has opted in. Off
@@ -152,14 +171,16 @@ class MainActivity : ComponentActivity() {
                     } else {
                         val voiceSettings by settingsRepo.voice
                             .collectAsStateWithLifecycle(initialValue = VoiceSettings())
-                        KioskScreen(
-                            detections = wakeWord.events,
-                            voiceUi = voice.ui,
-                            micLevel = voice.micLevel,
-                            voiceEngaged = voiceSettings.enabled && voiceSettings.configured,
-                            dashboard = dashboard.state,
-                            onOpenSettings = { showSettings = true },
-                        )
+                        CompositionLocalProvider(LocalLightCommander provides lightCommander) {
+                            KioskScreen(
+                                detections = wakeWord.events,
+                                voiceUi = voice.ui,
+                                micLevel = voice.micLevel,
+                                voiceEngaged = voiceSettings.enabled && voiceSettings.configured,
+                                dashboard = dashboard.state,
+                                onOpenSettings = { showSettings = true },
+                            )
+                        }
                     }
                 }
             }

@@ -79,6 +79,19 @@
             # the (already-pinned) AGP jar. Nothing mutable enters the lockfile.
             SDK_INDEX_TEST_BASE_URL = "file:///var/empty/hearthd-no-play-sdk-index/";
 
+            # Same failure mode, different fetch: lint's GradleDetector calls the
+            # Google Maven index (maven.google.com master-index.xml + a per-group
+            # group-index.xml) unconditionally while checking whether a newer
+            # library version exists. Those index files are rolling — Google
+            # rewrites them whenever any artifact in the group ships — so the
+            # recording proxy pins a moving target and the build stops reproducing
+            # on a cold cache. This env var (read by GoogleMavenRepository as
+            # GMAVEN_BASE_URL) points the index base at a non-network file:// path
+            # that does not exist, so the fetch fails cleanly and lint falls back
+            # to the offline index bundled in its jar. The app doesn't need it and
+            # Renovate owns version bumps, so nothing mutable enters the lockfile.
+            GMAVEN_TEST_BASE_URL = "file:///var/empty/hearthd-no-gmaven-index/";
+
             # AGP needs a writable "android home" for its prefs/analytics; the
             # sandbox HOME is read-only, so redirect it into the build tree. This
             # runs for both the dependency-fetch update and the real build.

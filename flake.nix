@@ -224,6 +224,23 @@
             echo "Build the APK with:  nix build .#hearthd-portal"
           '';
         };
+
+        # The publish workflow's toolbox, pinned to this flake's nixpkgs like
+        # everything else. CI enters it once (via the nix-develop action) so the
+        # sign/version/publish scripts find their tools on PATH: apksigner,
+        # zipalign and aapt2 from the SDK build-tools (need ANDROID_HOME + a
+        # JDK), and awscli2 for the R2 upload. Deliberately leaner than the
+        # default shell — no gradle or adb, which CI never runs.
+        devShells.ci = pkgs.mkShell {
+          packages = [
+            jdk
+            androidSdk
+            pkgs.awscli2
+          ];
+          ANDROID_HOME = sdkRoot;
+          ANDROID_SDK_ROOT = sdkRoot;
+          JAVA_HOME = "${jdk}";
+        };
       }
     );
 }

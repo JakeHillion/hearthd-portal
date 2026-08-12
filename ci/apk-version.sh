@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Read the versionCode/versionName that are actually compiled into an APK, so
-# the published manifest can't drift from the artifact. Run under `nix develop`
-# for aapt2 from the pinned SDK.
+# the published manifest can't drift from the artifact. Run under `nix develop
+# .#ci` for aapt2 from the pinned SDK.
 #
 # Usage: ci/apk-version.sh <apk> <out-env>
 #   writes `versionCode=…` / `versionName=…` lines to <out-env> (for $GITHUB_OUTPUT).

@@ -51,12 +51,18 @@ class DashboardController {
     // when a poll throws, so a dead server is retried gently, not hammered.
     private var backoffSeconds = MIN_BACKOFF_SECONDS
 
+    // The last URL polled, so a command-triggered nudge can re-poll it without
+    // the caller having to thread the URL back through.
+    @Volatile
+    private var lastStateUrl: String? = null
+
     /**
      * Run one poll cycle against [stateUrl]. Returns the number of seconds to
      * wait before the next call: the server's clamped `refresh_interval` on
      * success, or a growing backoff on failure.
      */
     suspend fun poll(stateUrl: String): Int = runLock.withLock {
+        lastStateUrl = stateUrl
         if (_state.value.template == null) {
             _state.update { it.copy(status = DashboardStatus.LOADING) }
         }
@@ -97,7 +103,17 @@ class DashboardController {
     /** Drop the current template and state, e.g. when the dashboard is disabled. */
     fun clear() {
         backoffSeconds = MIN_BACKOFF_SECONDS
+        lastStateUrl = null
         _state.value = DashboardUiState()
+    }
+
+    /**
+     * Re-poll the last URL immediately, if we've polled at all. Used after a
+     * light command so the confirmed state lands without waiting for the next
+     * scheduled poll. No-op before the first poll or once cleared.
+     */
+    suspend fun refreshNow() {
+        lastStateUrl?.let { poll(it) }
     }
 
     private suspend fun fetchState(stateUrl: String): StateResponse = withContext(Dispatchers.IO) {

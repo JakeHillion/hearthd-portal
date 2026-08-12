@@ -51,6 +51,7 @@ import dev.hearthd.android.portal.dashboard.DashboardStatus
 import dev.hearthd.android.portal.dashboard.DashboardUiState
 import dev.hearthd.android.portal.settings.Channel
 import dev.hearthd.android.portal.settings.DashboardSettings
+import dev.hearthd.android.portal.settings.HearthdSettings
 import dev.hearthd.android.portal.settings.INTERVAL_STOPS
 import dev.hearthd.android.portal.settings.SettingsRepository
 import dev.hearthd.android.portal.settings.THRESHOLD_RANGE
@@ -90,6 +91,7 @@ fun SettingsScreen(
     val voiceSettings by settingsRepo.voice.collectAsStateWithLifecycle(initialValue = VoiceSettings())
     val dashboardSettings by settingsRepo.dashboard.collectAsStateWithLifecycle(initialValue = DashboardSettings())
     val dashboardUi by dashboard.state.collectAsStateWithLifecycle()
+    val hearthdSettings by settingsRepo.hearthd.collectAsStateWithLifecycle(initialValue = HearthdSettings())
     val scope = rememberCoroutineScope()
     var section by rememberSaveable { mutableStateOf(SettingsSection.DISPLAY) }
 
@@ -141,9 +143,12 @@ fun SettingsScreen(
             SettingsSection.DISPLAY -> DisplayPane(
                 settings = dashboardSettings,
                 ui = dashboardUi,
+                hearthdSettings = hearthdSettings,
                 onEnabledChange = { scope.launch { settingsRepo.setDashboardEnabled(it) } },
                 onStateUrlChange = { scope.launch { settingsRepo.setDashboardStateUrl(it) } },
                 onRefreshNow = { url -> scope.launch { dashboard.poll(url) } },
+                onHearthdEnabledChange = { scope.launch { settingsRepo.setHearthdEnabled(it) } },
+                onHearthdBaseUrlChange = { scope.launch { settingsRepo.setHearthdBaseUrl(it) } },
             )
             SettingsSection.UPDATES -> UpdatesPane(
                 settings = settings,
@@ -176,13 +181,17 @@ fun SettingsScreen(
 private fun DisplayPane(
     settings: DashboardSettings,
     ui: DashboardUiState,
+    hearthdSettings: HearthdSettings,
     onEnabledChange: (Boolean) -> Unit,
     onStateUrlChange: (String) -> Unit,
     onRefreshNow: (String) -> Unit,
+    onHearthdEnabledChange: (Boolean) -> Unit,
+    onHearthdBaseUrlChange: (String) -> Unit,
 ) {
     // Local field state so typing doesn't fight DataStore round-trips; each edit
     // is still persisted immediately.
     var url by rememberSaveable { mutableStateOf(settings.stateUrl) }
+    var hearthdUrl by rememberSaveable { mutableStateOf(hearthdSettings.baseUrl) }
 
     Column(
         modifier = Modifier
@@ -225,6 +234,33 @@ private fun DisplayPane(
         OutlinedButton(onClick = { onRefreshNow(url) }, enabled = url.isNotBlank()) {
             Text(stringResource(R.string.dashboard_refresh_now))
         }
+
+        // ── Light control (hearthd) ───────────────────────────────────────
+        // The dashboard's /state feeds light state into the UI; this is the
+        // separate write path — where to send toggle/brightness commands.
+        Spacer(Modifier.height(40.dp))
+        SectionHeading(stringResource(R.string.settings_light_control))
+
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.hearthd_enable), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    stringResource(R.string.hearthd_enable_summary),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Switch(checked = hearthdSettings.enabled, onCheckedChange = onHearthdEnabledChange)
+        }
+        Spacer(Modifier.height(24.dp))
+
+        OutlinedTextField(
+            value = hearthdUrl,
+            onValueChange = { hearthdUrl = it; onHearthdBaseUrlChange(it) },
+            label = { Text(stringResource(R.string.hearthd_base_url)) },
+            placeholder = { Text("https://hearthd.example.com") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 

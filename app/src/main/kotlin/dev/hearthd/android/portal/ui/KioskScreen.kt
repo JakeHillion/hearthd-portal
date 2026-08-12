@@ -1,36 +1,48 @@
 package dev.hearthd.android.portal.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.hearthd.android.portal.R
+import dev.hearthd.android.portal.wakeword.WakeWordDetection
+import kotlinx.coroutines.flow.SharedFlow
 
 /**
  * The kiosk surface — what the Portal shows in normal operation. Deliberately
@@ -43,8 +55,28 @@ import dev.hearthd.android.portal.R
  * corner press won't be mistaken for that, or triggered by a stray touch.
  */
 @Composable
-fun KioskScreen(onOpenSettings: () -> Unit) {
+fun KioskScreen(
+    detections: SharedFlow<WakeWordDetection>,
+    onOpenSettings: () -> Unit,
+) {
     var trayVisible by remember { mutableStateOf(false) }
+
+    // The most recent detection to surface, and whether its popup is showing.
+    // A fresh detection resets the auto-hide timer.
+    var detection by remember { mutableStateOf<WakeWordDetection?>(null) }
+    var popupVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        detections.collect {
+            detection = it
+            popupVisible = true
+        }
+    }
+    LaunchedEffect(detection) {
+        if (detection != null) {
+            kotlinx.coroutines.delay(POPUP_MILLIS)
+            popupVisible = false
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Text(
@@ -64,6 +96,8 @@ fun KioskScreen(onOpenSettings: () -> Unit) {
                 },
         )
 
+        WakeWordPopup(visible = popupVisible, detection = detection)
+
         TopTray(
             visible = trayVisible,
             onDismiss = { trayVisible = false },
@@ -73,6 +107,77 @@ fun KioskScreen(onOpenSettings: () -> Unit) {
             },
         )
     }
+}
+
+private const val POPUP_MILLIS = 4000L
+
+/**
+ * A popup "blob" that rises from the bottom edge when a wake word is heard and
+ * fades away after a few seconds. Detection feedback only — no recording yet.
+ */
+@Composable
+private fun BoxScope.WakeWordPopup(visible: Boolean, detection: WakeWordDetection?) {
+    // Keep the last detection so the label survives the exit animation, when
+    // `detection` may already have been cleared.
+    var shown by remember { mutableStateOf<WakeWordDetection?>(null) }
+    if (detection != null) shown = detection
+
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn() + slideInVertically { it / 2 },
+        exit = fadeOut() + slideOutVertically { it / 2 },
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .padding(bottom = 56.dp),
+    ) {
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.primaryContainer,
+            tonalElevation = 6.dp,
+            shadowElevation = 12.dp,
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                PulseDot()
+                Column {
+                    Text(
+                        text = stringResource(R.string.wake_detected),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                    Text(
+                        text = shown?.model?.label ?: "",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** A softly pulsing dot, a small "I'm listening" flourish beside the label. */
+@Composable
+private fun PulseDot() {
+    val transition = rememberInfiniteTransition(label = "pulse")
+    val scale by transition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(700),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "pulse-scale",
+    )
+    Box(
+        modifier = Modifier
+            .size(14.dp)
+            .scale(scale)
+            .background(MaterialTheme.colorScheme.primary, CircleShape),
+    )
 }
 
 /**

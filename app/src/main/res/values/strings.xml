@@ -18,4 +18,17 @@
     <string name="update_channel">Channel</string>
     <string name="update_interval">Check every</string>
     <string name="update_check_now">Check now</string>
+    <string name="settings_wake_word">Wake word</string>
+    <string name="wake_enable">Wake-word detection</string>
+    <string name="wake_enable_summary">Listen on-device for a wake word. Off by default; the microphone is only opened while this is on. Nothing is recorded or sent anywhere.</string>
+    <string name="wake_model">Wake word</string>
+    <string name="wake_sensitivity">Sensitivity</string>
+    <string name="wake_sensitivity_summary">Lower the threshold to trigger more easily, at the cost of more false alarms.</string>
+    <string name="wake_permission_needed">Microphone access is needed to listen for the wake word.</string>
+    <string name="wake_grant_permission">Grant microphone access</string>
+    <string name="wake_detected">Wake word detected</string>
+    <string name="settings_licenses">Open-source licenses</string>
+    <string name="licenses_summary">The open-source software this app is built on.</string>
+    <string name="licenses_intro">hearthd for Portal is built on open-source software. The components below are included under their respective licenses.</string>
+    <string name="licenses_back">Device</string>
 </resources>

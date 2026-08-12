@@ -11,6 +11,7 @@ import android.provider.Settings
 import android.text.format.DateUtils
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,6 +29,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -46,27 +48,37 @@ import dev.hearthd.android.portal.R
 import dev.hearthd.android.portal.settings.Channel
 import dev.hearthd.android.portal.settings.INTERVAL_STOPS
 import dev.hearthd.android.portal.settings.SettingsRepository
+import dev.hearthd.android.portal.settings.THRESHOLD_RANGE
 import dev.hearthd.android.portal.settings.UpdateSettings
+import dev.hearthd.android.portal.settings.WakeWordSettings
 import dev.hearthd.android.portal.settings.formatInterval
 import dev.hearthd.android.portal.update.UpdateController
 import dev.hearthd.android.portal.update.UpdateStatus
 import dev.hearthd.android.portal.update.UpdateUiState
+import dev.hearthd.android.portal.wakeword.WakeWordDetector
+import dev.hearthd.android.portal.wakeword.WakeWordModel
+import dev.hearthd.android.portal.wakeword.WakeWordStatus
+import dev.hearthd.android.portal.wakeword.WakeWordUiState
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlin.math.roundToInt
 
 /** Sections shown in the settings navigation rail. */
-private enum class SettingsSection { UPDATES, DEVICE_INFO, SENSORS }
+private enum class SettingsSection { UPDATES, WAKE_WORD, DEVICE_INFO, SENSORS }
 
 /** Root settings screen: a navigation rail with sections. */
 @Composable
 fun SettingsScreen(
     settingsRepo: SettingsRepository,
     controller: UpdateController,
+    wakeWord: WakeWordDetector,
+    onRequestMicPermission: () -> Unit,
     onClose: () -> Unit,
 ) {
     val settings by settingsRepo.settings.collectAsStateWithLifecycle(initialValue = UpdateSettings())
     val ui by controller.state.collectAsStateWithLifecycle()
+    val wakeSettings by settingsRepo.wakeWord.collectAsStateWithLifecycle(initialValue = WakeWordSettings())
+    val wakeUi by wakeWord.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var section by rememberSaveable { mutableStateOf(SettingsSection.UPDATES) }
 
@@ -85,6 +97,12 @@ fun SettingsScreen(
                 onClick = { section = SettingsSection.UPDATES },
                 icon = { Text("↻") },
                 label = { Text(stringResource(R.string.settings_updates)) },
+            )
+            NavigationRailItem(
+                selected = section == SettingsSection.WAKE_WORD,
+                onClick = { section = SettingsSection.WAKE_WORD },
+                icon = { Text("🎤") },
+                label = { Text(stringResource(R.string.settings_wake_word)) },
             )
             NavigationRailItem(
                 selected = section == SettingsSection.DEVICE_INFO,
@@ -110,6 +128,14 @@ fun SettingsScreen(
                 onChannelChange = { scope.launch { settingsRepo.setChannel(it) } },
                 onIntervalChange = { scope.launch { settingsRepo.setIntervalMinutes(it) } },
                 onCheckNow = { scope.launch { controller.check(settings.channel) } },
+            )
+            SettingsSection.WAKE_WORD -> WakeWordPane(
+                settings = wakeSettings,
+                ui = wakeUi,
+                onEnabledChange = { scope.launch { settingsRepo.setWakeEnabled(it) } },
+                onModelChange = { scope.launch { settingsRepo.setWakeModel(it) } },
+                onThresholdChange = { scope.launch { settingsRepo.setWakeThreshold(it) } },
+                onRequestPermission = onRequestMicPermission,
             )
             SettingsSection.DEVICE_INFO -> DeviceInfoPane()
             SettingsSection.SENSORS -> SensorsPane()
@@ -199,8 +225,108 @@ private fun UpdatesPane(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WakeWordPane(
+    settings: WakeWordSettings,
+    ui: WakeWordUiState,
+    onEnabledChange: (Boolean) -> Unit,
+    onModelChange: (WakeWordModel) -> Unit,
+    onThresholdChange: (Float) -> Unit,
+    onRequestPermission: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+    ) {
+        Text(stringResource(R.string.settings_wake_word), style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.height(16.dp))
+
+        // Opt-in toggle.
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.wake_enable), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    stringResource(R.string.wake_enable_summary),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Switch(checked = settings.enabled, onCheckedChange = onEnabledChange)
+        }
+        Spacer(Modifier.height(24.dp))
+
+        // Permission prompt, shown only when enabled but the mic isn't granted.
+        if (ui.status == WakeWordStatus.NO_PERMISSION) {
+            Text(
+                stringResource(R.string.wake_permission_needed),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = onRequestPermission) {
+                Text(stringResource(R.string.wake_grant_permission))
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+
+        // Wake-word model.
+        Text(stringResource(R.string.wake_model), style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            WakeWordModel.entries.forEach { model ->
+                FilterChip(
+                    selected = settings.model == model,
+                    onClick = { onModelChange(model) },
+                    label = { Text(model.label) },
+                )
+            }
+        }
+        Spacer(Modifier.height(24.dp))
+
+        // Sensitivity (detection threshold).
+        Text(
+            "${stringResource(R.string.wake_sensitivity)} ${"%.2f".format(settings.threshold)}",
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Text(
+            stringResource(R.string.wake_sensitivity_summary),
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Slider(
+            value = settings.threshold,
+            onValueChange = onThresholdChange,
+            valueRange = THRESHOLD_RANGE,
+        )
+        Spacer(Modifier.height(24.dp))
+
+        // Live status: what the detector is doing plus the current score.
+        Text(wakeStatusLine(ui), style = MaterialTheme.typography.bodyMedium)
+        if (ui.status == WakeWordStatus.LISTENING) {
+            Text(
+                "Score: ${"%.2f".format(ui.lastScore)}",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        ui.lastDetectionEpochMs?.let {
+            Text(
+                "Last detected ${DateUtils.getRelativeTimeSpanString(it)}",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
 @Composable
 private fun DeviceInfoPane() {
+    // The licenses page lives under Device (the "About" section), the way most
+    // apps nest their open-source notices. A local flag swaps it in and back.
+    var showLicenses by rememberSaveable { mutableStateOf(false) }
+    if (showLicenses) {
+        LicensesPane(onBack = { showLicenses = false })
+        return
+    }
+
     val context = LocalContext.current
     Column(
         modifier = Modifier
@@ -219,6 +345,17 @@ private fun DeviceInfoPane() {
         )
         Spacer(Modifier.height(24.dp))
 
+        // Open-source notices.
+        Text(
+            stringResource(R.string.licenses_summary),
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(onClick = { showLicenses = true }) {
+            Text(stringResource(R.string.settings_licenses))
+        }
+        Spacer(Modifier.height(24.dp))
+
         // Escape hatch out of the kiosk into the native Settings app — the only
         // way to reach Developer options and re-enable ADB on a fresh machine.
         Text(
@@ -228,6 +365,43 @@ private fun DeviceInfoPane() {
         Spacer(Modifier.height(8.dp))
         OutlinedButton(onClick = { context.startActivity(Intent(Settings.ACTION_SETTINGS)) }) {
             Text(stringResource(R.string.device_open_settings))
+        }
+    }
+}
+
+/**
+ * Open-source licenses / attribution — the "third-party software" page every
+ * app tucks under About. One block per component, showing its copyright and
+ * license; the notices are legal text so they stay verbatim in code, not in
+ * translatable resources.
+ */
+@Composable
+private fun LicensesPane(onBack: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+    ) {
+        TextButton(onClick = onBack, contentPadding = PaddingValues(0.dp)) {
+            Text("←  ${stringResource(R.string.licenses_back)}")
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(stringResource(R.string.settings_licenses), style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.height(12.dp))
+        Text(stringResource(R.string.licenses_intro), style = MaterialTheme.typography.bodyMedium)
+
+        THIRD_PARTY_LICENSES.forEach { entry ->
+            Spacer(Modifier.height(24.dp))
+            Text(entry.name, style = MaterialTheme.typography.titleMedium)
+            Text(entry.copyright, style = MaterialTheme.typography.bodySmall)
+            Text(
+                entry.license,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(entry.notice, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -337,3 +511,75 @@ private fun statusLine(ui: UpdateUiState): String {
     } ?: ""
     return status + checked
 }
+
+private fun wakeStatusLine(ui: WakeWordUiState): String = when (ui.status) {
+    WakeWordStatus.DISABLED -> "Disabled"
+    WakeWordStatus.NO_PERMISSION -> "Microphone permission needed"
+    WakeWordStatus.STARTING -> "Starting…"
+    WakeWordStatus.LISTENING -> "Listening for \"${ui.model?.label ?: ""}\""
+    WakeWordStatus.ERROR -> "Error: ${ui.message ?: "unknown error"}"
+}
+
+/** One third-party component shown on the licenses page. */
+private data class LicenseEntry(
+    val name: String,
+    val copyright: String,
+    val license: String,
+    val notice: String,
+)
+
+/**
+ * Third-party components bundled into the app. openWakeWord's models are the
+ * only non-permissive item: CC BY-NC-SA 4.0, used unmodified and non-commercially.
+ */
+private val THIRD_PARTY_LICENSES = listOf(
+    LicenseEntry(
+        name = "openWakeWord — wake-word models",
+        copyright = "© David Scripka and the openWakeWord contributors",
+        license = "CC BY-NC-SA 4.0",
+        notice = "The bundled melspectrogram, embedding, and wake-word models are " +
+            "distributed under the Creative Commons Attribution-NonCommercial-" +
+            "ShareAlike 4.0 International license, used unmodified for non-commercial, " +
+            "on-device detection. The shared speech-embedding backbone derives from " +
+            "Google's speech_embedding model (Apache-2.0). openWakeWord's own source " +
+            "code is Apache-2.0; the detection pipeline here is an independent " +
+            "reimplementation.\n\n" +
+            "License: https://creativecommons.org/licenses/by-nc-sa/4.0/\n" +
+            "Project: https://github.com/dscripka/openWakeWord",
+    ),
+    LicenseEntry(
+        name = "ONNX Runtime",
+        copyright = "© Microsoft Corporation",
+        license = "MIT License",
+        notice = "Permission is hereby granted, free of charge, to any person obtaining " +
+            "a copy of this software and associated documentation files (the " +
+            "\"Software\"), to deal in the Software without restriction, including " +
+            "without limitation the rights to use, copy, modify, merge, publish, " +
+            "distribute, sublicense, and/or sell copies of the Software, and to permit " +
+            "persons to whom the Software is furnished to do so, subject to the " +
+            "following conditions:\n\n" +
+            "The above copyright notice and this permission notice shall be included in " +
+            "all copies or substantial portions of the Software.\n\n" +
+            "THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR " +
+            "IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, " +
+            "FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE " +
+            "AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER " +
+            "LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING " +
+            "FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER " +
+            "DEALINGS IN THE SOFTWARE.",
+    ),
+    LicenseEntry(
+        name = "Jetpack Compose & AndroidX",
+        copyright = "© The Android Open Source Project",
+        license = "Apache License 2.0",
+        notice = "Licensed under the Apache License, Version 2.0.\n" +
+            "License: https://www.apache.org/licenses/LICENSE-2.0",
+    ),
+    LicenseEntry(
+        name = "Kotlin & kotlinx.coroutines",
+        copyright = "© JetBrains s.r.o. and the Kotlin contributors",
+        license = "Apache License 2.0",
+        notice = "Licensed under the Apache License, Version 2.0.\n" +
+            "License: https://www.apache.org/licenses/LICENSE-2.0",
+    ),
+)

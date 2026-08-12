@@ -780,26 +780,6 @@
    "pom": "sha256-O7RSgN8d0clrmgFySmFFZrfWDTNFP81SwsdB+ZmcOk4="
   }
  },
- "https://maven.google.com": {
-  "androidx/activity/group-index": {
-   "xml": "sha256-pOXdVTd8w6bAsTCm8Lsi+8ojwg4Hi3VMqh0XrYxFHdE="
-  },
-  "androidx/compose/group-index": {
-   "xml": "sha256-sCbG5IEiP/C4AXjZ2EXiCWV5QsoOWk0HIxwS8sONao4="
-  },
-  "androidx/core/group-index": {
-   "xml": "sha256-4EHdtGPkScbgbmXQIIjJwqBlxsvsjBp0pbH+XauY/HE="
-  },
-  "androidx/datastore/group-index": {
-   "xml": "sha256-fN9fr3Z4twM5VQGaneBae0Z3/0ofLhLrI6EmmHeD7wo="
-  },
-  "androidx/lifecycle/group-index": {
-   "xml": "sha256-0/LSRkWzRWvjtwU0I+Dhwj+mJGSZ8Ho22Q71LLOI+PM="
-  },
-  "master-index": {
-   "xml": "sha256-RE9n8mk4liYNj4dWFjRjrHjMsFE5yETce8NSmvsvhy4="
-  }
- },
  "https://repo.maven.apache.org/maven2": {
   "com/google/android#annotations/4.1.1.4": {
    "jar": "sha256-unNOHoTAnWFa9qCdMwNLTwRC+Hct7BIO+zdthqVlrhU=",

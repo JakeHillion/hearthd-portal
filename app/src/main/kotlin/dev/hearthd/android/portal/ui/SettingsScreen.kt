@@ -26,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -50,6 +51,7 @@ import dev.hearthd.android.portal.settings.INTERVAL_STOPS
 import dev.hearthd.android.portal.settings.SettingsRepository
 import dev.hearthd.android.portal.settings.THRESHOLD_RANGE
 import dev.hearthd.android.portal.settings.UpdateSettings
+import dev.hearthd.android.portal.settings.VoiceSettings
 import dev.hearthd.android.portal.settings.WakeWordSettings
 import dev.hearthd.android.portal.settings.formatInterval
 import dev.hearthd.android.portal.update.UpdateController
@@ -64,7 +66,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import kotlin.math.roundToInt
 
 /** Sections shown in the settings navigation rail. */
-private enum class SettingsSection { UPDATES, WAKE_WORD, DEVICE_INFO, SENSORS }
+private enum class SettingsSection { UPDATES, ASSISTANT, DEVICE_INFO, SENSORS }
 
 /** Root settings screen: a navigation rail with sections. */
 @Composable
@@ -73,12 +75,14 @@ fun SettingsScreen(
     controller: UpdateController,
     wakeWord: WakeWordDetector,
     onRequestMicPermission: () -> Unit,
+    onTestVoice: suspend (VoiceSettings) -> String,
     onClose: () -> Unit,
 ) {
     val settings by settingsRepo.settings.collectAsStateWithLifecycle(initialValue = UpdateSettings())
     val ui by controller.state.collectAsStateWithLifecycle()
     val wakeSettings by settingsRepo.wakeWord.collectAsStateWithLifecycle(initialValue = WakeWordSettings())
     val wakeUi by wakeWord.state.collectAsStateWithLifecycle()
+    val voiceSettings by settingsRepo.voice.collectAsStateWithLifecycle(initialValue = VoiceSettings())
     val scope = rememberCoroutineScope()
     var section by rememberSaveable { mutableStateOf(SettingsSection.UPDATES) }
 
@@ -99,10 +103,10 @@ fun SettingsScreen(
                 label = { Text(stringResource(R.string.settings_updates)) },
             )
             NavigationRailItem(
-                selected = section == SettingsSection.WAKE_WORD,
-                onClick = { section = SettingsSection.WAKE_WORD },
-                icon = { Text("🎤") },
-                label = { Text(stringResource(R.string.settings_wake_word)) },
+                selected = section == SettingsSection.ASSISTANT,
+                onClick = { section = SettingsSection.ASSISTANT },
+                icon = { Text("🎙") },
+                label = { Text(stringResource(R.string.settings_assistant)) },
             )
             NavigationRailItem(
                 selected = section == SettingsSection.DEVICE_INFO,
@@ -129,13 +133,18 @@ fun SettingsScreen(
                 onIntervalChange = { scope.launch { settingsRepo.setIntervalMinutes(it) } },
                 onCheckNow = { scope.launch { controller.check(settings.channel) } },
             )
-            SettingsSection.WAKE_WORD -> WakeWordPane(
-                settings = wakeSettings,
-                ui = wakeUi,
-                onEnabledChange = { scope.launch { settingsRepo.setWakeEnabled(it) } },
-                onModelChange = { scope.launch { settingsRepo.setWakeModel(it) } },
-                onThresholdChange = { scope.launch { settingsRepo.setWakeThreshold(it) } },
+            SettingsSection.ASSISTANT -> AssistantPane(
+                wakeSettings = wakeSettings,
+                wakeUi = wakeUi,
+                voiceSettings = voiceSettings,
+                onWakeEnabledChange = { scope.launch { settingsRepo.setWakeEnabled(it) } },
+                onWakeModelChange = { scope.launch { settingsRepo.setWakeModel(it) } },
+                onWakeThresholdChange = { scope.launch { settingsRepo.setWakeThreshold(it) } },
                 onRequestPermission = onRequestMicPermission,
+                onVoiceEnabledChange = { scope.launch { settingsRepo.setVoiceEnabled(it) } },
+                onBaseUrlChange = { scope.launch { settingsRepo.setVoiceBaseUrl(it) } },
+                onPipelineChange = { scope.launch { settingsRepo.setVoicePipeline(it) } },
+                onTest = onTestVoice,
             )
             SettingsSection.DEVICE_INFO -> DeviceInfoPane()
             SettingsSection.SENSORS -> SensorsPane()
@@ -225,26 +234,43 @@ private fun UpdatesPane(
     }
 }
 
+/**
+ * The Assistant section: one scrolling pane with a permanent "Wake word"
+ * subsection on top and the Alpha "Home Assistant" voice integration below it.
+ * They're grouped because the wake word is what triggers a voice request.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WakeWordPane(
-    settings: WakeWordSettings,
-    ui: WakeWordUiState,
-    onEnabledChange: (Boolean) -> Unit,
-    onModelChange: (WakeWordModel) -> Unit,
-    onThresholdChange: (Float) -> Unit,
+private fun AssistantPane(
+    wakeSettings: WakeWordSettings,
+    wakeUi: WakeWordUiState,
+    voiceSettings: VoiceSettings,
+    onWakeEnabledChange: (Boolean) -> Unit,
+    onWakeModelChange: (WakeWordModel) -> Unit,
+    onWakeThresholdChange: (Float) -> Unit,
     onRequestPermission: () -> Unit,
+    onVoiceEnabledChange: (Boolean) -> Unit,
+    onBaseUrlChange: (String) -> Unit,
+    onPipelineChange: (String) -> Unit,
+    onTest: suspend (VoiceSettings) -> String,
 ) {
+    val scope = rememberCoroutineScope()
+    // Local field state so typing doesn't fight DataStore round-trips; each edit
+    // is still persisted immediately.
+    var url by rememberSaveable { mutableStateOf(voiceSettings.baseUrl) }
+    var pipeline by rememberSaveable { mutableStateOf(voiceSettings.pipelineId) }
+    var testStatus by rememberSaveable { mutableStateOf<String?>(null) }
+    var testing by rememberSaveable { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(24.dp),
     ) {
-        Text(stringResource(R.string.settings_wake_word), style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(16.dp))
+        // ── Wake word (here to stay) ──────────────────────────────────────
+        SectionHeading("🎤  ${stringResource(R.string.settings_wake_word)}")
 
-        // Opt-in toggle.
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(stringResource(R.string.wake_enable), style = MaterialTheme.typography.titleMedium)
@@ -253,12 +279,12 @@ private fun WakeWordPane(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            Switch(checked = settings.enabled, onCheckedChange = onEnabledChange)
+            Switch(checked = wakeSettings.enabled, onCheckedChange = onWakeEnabledChange)
         }
         Spacer(Modifier.height(24.dp))
 
         // Permission prompt, shown only when enabled but the mic isn't granted.
-        if (ui.status == WakeWordStatus.NO_PERMISSION) {
+        if (wakeUi.status == WakeWordStatus.NO_PERMISSION) {
             Text(
                 stringResource(R.string.wake_permission_needed),
                 style = MaterialTheme.typography.bodyMedium,
@@ -276,8 +302,8 @@ private fun WakeWordPane(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             WakeWordModel.entries.forEach { model ->
                 FilterChip(
-                    selected = settings.model == model,
-                    onClick = { onModelChange(model) },
+                    selected = wakeSettings.model == model,
+                    onClick = { onWakeModelChange(model) },
                     label = { Text(model.label) },
                 )
             }
@@ -286,7 +312,7 @@ private fun WakeWordPane(
 
         // Sensitivity (detection threshold).
         Text(
-            "${stringResource(R.string.wake_sensitivity)} ${"%.2f".format(settings.threshold)}",
+            "${stringResource(R.string.wake_sensitivity)} ${"%.2f".format(wakeSettings.threshold)}",
             style = MaterialTheme.typography.titleMedium,
         )
         Text(
@@ -294,27 +320,111 @@ private fun WakeWordPane(
             style = MaterialTheme.typography.bodySmall,
         )
         Slider(
-            value = settings.threshold,
-            onValueChange = onThresholdChange,
+            value = wakeSettings.threshold,
+            onValueChange = onWakeThresholdChange,
             valueRange = THRESHOLD_RANGE,
         )
         Spacer(Modifier.height(24.dp))
 
         // Live status: what the detector is doing plus the current score.
-        Text(wakeStatusLine(ui), style = MaterialTheme.typography.bodyMedium)
-        if (ui.status == WakeWordStatus.LISTENING) {
+        Text(wakeStatusLine(wakeUi), style = MaterialTheme.typography.bodyMedium)
+        if (wakeUi.status == WakeWordStatus.LISTENING) {
             Text(
-                "Score: ${"%.2f".format(ui.lastScore)}",
+                "Score: ${"%.2f".format(wakeUi.lastScore)}",
                 style = MaterialTheme.typography.bodySmall,
             )
         }
-        ui.lastDetectionEpochMs?.let {
+        wakeUi.lastDetectionEpochMs?.let {
             Text(
                 "Last detected ${DateUtils.getRelativeTimeSpanString(it)}",
                 style = MaterialTheme.typography.bodySmall,
             )
         }
+
+        // ── Home Assistant (Alpha) ────────────────────────────────────────
+        Spacer(Modifier.height(40.dp))
+        SectionHeading("🏠  Home Assistant (Alpha)")
+        Text(
+            "This behaviour is likely to be removed in a future release.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Spacer(Modifier.height(20.dp))
+
+        // Opt-in toggle.
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Voice assistant", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Off by default. Uses the wake word above to start each request.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Switch(checked = voiceSettings.enabled, onCheckedChange = onVoiceEnabledChange)
+        }
+        if (voiceSettings.enabled && !wakeSettings.enabled) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Turn on the wake word above too — it's what starts a request.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        Spacer(Modifier.height(24.dp))
+
+        // Home Assistant location.
+        OutlinedTextField(
+            value = url,
+            onValueChange = { url = it; onBaseUrlChange(it) },
+            label = { Text("Home Assistant URL") },
+            placeholder = { Text("https://homeassistant.example.com") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(16.dp))
+        OutlinedTextField(
+            value = pipeline,
+            onValueChange = { pipeline = it; onPipelineChange(it) },
+            label = { Text("Pipeline ID (optional)") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            "Leave blank to use Home Assistant's preferred pipeline.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Spacer(Modifier.height(20.dp))
+
+        OutlinedButton(
+            onClick = {
+                scope.launch {
+                    testing = true
+                    testStatus = null
+                    testStatus = onTest(voiceSettings.copy(baseUrl = url, pipelineId = pipeline))
+                    testing = false
+                }
+            },
+            enabled = !testing && url.isNotBlank(),
+        ) {
+            Text(if (testing) "Testing…" else "Test connection")
+        }
+        testStatus?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(it, style = MaterialTheme.typography.bodyMedium)
+        }
+        Spacer(Modifier.height(20.dp))
+        Text(
+            "Sign-in uses Home Assistant's trusted_networks provider — no token to " +
+                "enter; the Portal is trusted by its network address.",
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
+}
+
+/** A body heading that separates the scrolling subsections of a settings pane. */
+@Composable
+private fun SectionHeading(text: String) {
+    Text(text, style = MaterialTheme.typography.headlineSmall)
+    Spacer(Modifier.height(16.dp))
 }
 
 @Composable

@@ -19,18 +19,24 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import dev.hearthd.android.portal.settings.SettingsRepository
+import dev.hearthd.android.portal.settings.VoiceSettings
 import dev.hearthd.android.portal.ui.KioskScreen
 import dev.hearthd.android.portal.ui.SettingsScreen
 import dev.hearthd.android.portal.update.UpdateController
+import dev.hearthd.android.portal.voice.HomeAssistantAssist
+import dev.hearthd.android.portal.voice.HomeAssistantAuth
+import dev.hearthd.android.portal.voice.VoiceController
 import dev.hearthd.android.portal.wakeword.WakeWordDetector
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
 
 class MainActivity : ComponentActivity() {
     // Whether RECORD_AUDIO is currently granted. Re-checked in onResume so the
@@ -56,6 +62,7 @@ class MainActivity : ComponentActivity() {
         val settingsRepo = SettingsRepository(applicationContext)
         val controller = UpdateController(applicationContext)
         val wakeWord = WakeWordDetector(applicationContext)
+        val voice = VoiceController(lifecycleScope)
 
         // The update loop lives here, scoped to the foreground: it only runs
         // while the app is at least STARTED and the user has opted in. Off
@@ -90,6 +97,21 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Voice (Alpha): when enabled + configured, a wake-word detection starts
+        // a Home Assistant turn, streaming the mic frames the detector publishes.
+        // collectLatest rebuilds the assistant when the HA settings change.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                settingsRepo.voice.collectLatest { v ->
+                    if (!v.enabled || !v.configured) return@collectLatest
+                    val assistant = HomeAssistantAssist(v.baseUrl, v.pipelineId)
+                    wakeWord.events.collect {
+                        voice.startTurn(assistant, wakeWord.audioFrames)
+                    }
+                }
+            }
+        }
+
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
@@ -102,11 +124,17 @@ class MainActivity : ComponentActivity() {
                             controller = controller,
                             wakeWord = wakeWord,
                             onRequestMicPermission = { requestMic.launch(Manifest.permission.RECORD_AUDIO) },
+                            onTestVoice = ::testVoiceConnection,
                             onClose = { showSettings = false },
                         )
                     } else {
+                        val voiceSettings by settingsRepo.voice
+                            .collectAsStateWithLifecycle(initialValue = VoiceSettings())
                         KioskScreen(
                             detections = wakeWord.events,
+                            voiceUi = voice.ui,
+                            micLevel = voice.micLevel,
+                            voiceEngaged = voiceSettings.enabled && voiceSettings.configured,
                             onOpenSettings = { showSettings = true },
                         )
                     }
@@ -127,6 +155,13 @@ class MainActivity : ComponentActivity() {
         // returning to the foreground. Re-hide them whenever we regain focus.
         if (hasFocus) hideSystemBars()
     }
+
+    /** Try to authenticate against HA (trusted_networks), returning a status line. */
+    private suspend fun testVoiceConnection(settings: VoiceSettings): String =
+        runCatching {
+            HomeAssistantAuth(OkHttpClient(), settings.baseUrl).accessToken()
+            "Connected — Home Assistant authorized this device"
+        }.getOrElse { "Failed: ${it.message}" }
 
     private fun hasMicPermission(): Boolean =
         ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==

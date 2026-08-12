@@ -25,7 +25,7 @@ out_apk="${2:?usage: sign-apk.sh <in.apk> <out.apk>}"
 : "${SIGNING_KEY_PASSWORD:?SIGNING_KEY_PASSWORD not set}"
 key_alias="${SIGNING_KEY_ALIAS:-hearthd-portal}"
 
-build_tools="${ANDROID_HOME:?ANDROID_HOME not set}/build-tools/35.0.0"
+build_tools="${ANDROID_HOME:?ANDROID_HOME not set}/build-tools/36.0.0"
 apksigner="$build_tools/apksigner"
 zipalign="$build_tools/zipalign"
 

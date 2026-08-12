@@ -18,6 +18,11 @@
     <string name="update_channel">Channel</string>
     <string name="update_interval">Check every</string>
     <string name="update_check_now">Check now</string>
+    <string name="settings_display">Display</string>
+    <string name="dashboard_enable">Dashboard</string>
+    <string name="dashboard_enable_summary">Show a remote dashboard on the kiosk. Off by default; nothing is fetched until enabled and a URL is set.</string>
+    <string name="dashboard_state_url">State URL</string>
+    <string name="dashboard_refresh_now">Refresh now</string>
     <string name="settings_wake_word">Wake word</string>
     <string name="settings_assistant">Assistant</string>
     <string name="wake_enable">Wake-word detection</string>

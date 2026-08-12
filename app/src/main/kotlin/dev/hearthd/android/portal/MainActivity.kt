@@ -22,6 +22,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import dev.hearthd.android.portal.dashboard.DashboardController
 import dev.hearthd.android.portal.settings.SettingsRepository
 import dev.hearthd.android.portal.settings.VoiceSettings
 import dev.hearthd.android.portal.ui.KioskScreen
@@ -63,6 +64,7 @@ class MainActivity : ComponentActivity() {
         val controller = UpdateController(applicationContext)
         val wakeWord = WakeWordDetector(applicationContext)
         val voice = VoiceController(lifecycleScope)
+        val dashboard = DashboardController()
 
         // The update loop lives here, scoped to the foreground: it only runs
         // while the app is at least STARTED and the user has opted in. Off
@@ -97,6 +99,25 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // The dashboard poll loop, on the same foreground-only, opt-in footing as
+        // updates: it fetches nothing until enabled and a URL is set. The server
+        // dictates the cadence (poll() returns the seconds to wait); collectLatest
+        // restarts the loop on settings change, and clears the surface when off.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                settingsRepo.dashboard.collectLatest { s ->
+                    if (!s.enabled || !s.configured) {
+                        dashboard.clear()
+                        return@collectLatest
+                    }
+                    while (true) {
+                        val waitSeconds = dashboard.poll(s.stateUrl)
+                        delay(waitSeconds.toLong() * 1_000L)
+                    }
+                }
+            }
+        }
+
         // Voice (Alpha): when enabled + configured, a wake-word detection starts
         // a Home Assistant turn, streaming the mic frames the detector publishes.
         // collectLatest rebuilds the assistant when the HA settings change.
@@ -123,6 +144,7 @@ class MainActivity : ComponentActivity() {
                             settingsRepo = settingsRepo,
                             controller = controller,
                             wakeWord = wakeWord,
+                            dashboard = dashboard,
                             onRequestMicPermission = { requestMic.launch(Manifest.permission.RECORD_AUDIO) },
                             onTestVoice = ::testVoiceConnection,
                             onClose = { showSettings = false },
@@ -135,6 +157,7 @@ class MainActivity : ComponentActivity() {
                             voiceUi = voice.ui,
                             micLevel = voice.micLevel,
                             voiceEngaged = voiceSettings.enabled && voiceSettings.configured,
+                            dashboard = dashboard.state,
                             onOpenSettings = { showSettings = true },
                         )
                     }

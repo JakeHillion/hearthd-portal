@@ -46,7 +46,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.hearthd.android.portal.BuildConfig
 import dev.hearthd.android.portal.R
+import dev.hearthd.android.portal.dashboard.DashboardController
+import dev.hearthd.android.portal.dashboard.DashboardStatus
+import dev.hearthd.android.portal.dashboard.DashboardUiState
 import dev.hearthd.android.portal.settings.Channel
+import dev.hearthd.android.portal.settings.DashboardSettings
 import dev.hearthd.android.portal.settings.INTERVAL_STOPS
 import dev.hearthd.android.portal.settings.SettingsRepository
 import dev.hearthd.android.portal.settings.THRESHOLD_RANGE
@@ -66,7 +70,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import kotlin.math.roundToInt
 
 /** Sections shown in the settings navigation rail. */
-private enum class SettingsSection { UPDATES, ASSISTANT, DEVICE_INFO, SENSORS }
+private enum class SettingsSection { DISPLAY, UPDATES, ASSISTANT, DEVICE_INFO, SENSORS }
 
 /** Root settings screen: a navigation rail with sections. */
 @Composable
@@ -74,6 +78,7 @@ fun SettingsScreen(
     settingsRepo: SettingsRepository,
     controller: UpdateController,
     wakeWord: WakeWordDetector,
+    dashboard: DashboardController,
     onRequestMicPermission: () -> Unit,
     onTestVoice: suspend (VoiceSettings) -> String,
     onClose: () -> Unit,
@@ -83,8 +88,10 @@ fun SettingsScreen(
     val wakeSettings by settingsRepo.wakeWord.collectAsStateWithLifecycle(initialValue = WakeWordSettings())
     val wakeUi by wakeWord.state.collectAsStateWithLifecycle()
     val voiceSettings by settingsRepo.voice.collectAsStateWithLifecycle(initialValue = VoiceSettings())
+    val dashboardSettings by settingsRepo.dashboard.collectAsStateWithLifecycle(initialValue = DashboardSettings())
+    val dashboardUi by dashboard.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
-    var section by rememberSaveable { mutableStateOf(SettingsSection.UPDATES) }
+    var section by rememberSaveable { mutableStateOf(SettingsSection.DISPLAY) }
 
     Row(modifier = Modifier.fillMaxSize()) {
         NavigationRail {
@@ -95,6 +102,12 @@ fun SettingsScreen(
                 onClick = onClose,
                 icon = { Text("←") },
                 label = { Text(stringResource(R.string.settings_close)) },
+            )
+            NavigationRailItem(
+                selected = section == SettingsSection.DISPLAY,
+                onClick = { section = SettingsSection.DISPLAY },
+                icon = { Text("▦") },
+                label = { Text(stringResource(R.string.settings_display)) },
             )
             NavigationRailItem(
                 selected = section == SettingsSection.UPDATES,
@@ -125,6 +138,13 @@ fun SettingsScreen(
             )
         }
         when (section) {
+            SettingsSection.DISPLAY -> DisplayPane(
+                settings = dashboardSettings,
+                ui = dashboardUi,
+                onEnabledChange = { scope.launch { settingsRepo.setDashboardEnabled(it) } },
+                onStateUrlChange = { scope.launch { settingsRepo.setDashboardStateUrl(it) } },
+                onRefreshNow = { url -> scope.launch { dashboard.poll(url) } },
+            )
             SettingsSection.UPDATES -> UpdatesPane(
                 settings = settings,
                 ui = ui,
@@ -148,6 +168,62 @@ fun SettingsScreen(
             )
             SettingsSection.DEVICE_INFO -> DeviceInfoPane()
             SettingsSection.SENSORS -> SensorsPane()
+        }
+    }
+}
+
+@Composable
+private fun DisplayPane(
+    settings: DashboardSettings,
+    ui: DashboardUiState,
+    onEnabledChange: (Boolean) -> Unit,
+    onStateUrlChange: (String) -> Unit,
+    onRefreshNow: (String) -> Unit,
+) {
+    // Local field state so typing doesn't fight DataStore round-trips; each edit
+    // is still persisted immediately.
+    var url by rememberSaveable { mutableStateOf(settings.stateUrl) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+    ) {
+        Text(stringResource(R.string.settings_display), style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.height(16.dp))
+
+        // Opt-in toggle.
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.dashboard_enable), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    stringResource(R.string.dashboard_enable_summary),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Switch(checked = settings.enabled, onCheckedChange = onEnabledChange)
+        }
+        Spacer(Modifier.height(24.dp))
+
+        // The /state endpoint. The template endpoint is derived from it, so the
+        // operator only ever configures this one URL.
+        OutlinedTextField(
+            value = url,
+            onValueChange = { url = it; onStateUrlChange(it) },
+            label = { Text(stringResource(R.string.dashboard_state_url)) },
+            placeholder = { Text("https://home.example.com/state") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(20.dp))
+
+        // Live status of the poller.
+        Text(dashboardStatusLine(ui), style = MaterialTheme.typography.bodyMedium)
+        Spacer(Modifier.height(16.dp))
+
+        OutlinedButton(onClick = { onRefreshNow(url) }, enabled = url.isNotBlank()) {
+            Text(stringResource(R.string.dashboard_refresh_now))
         }
     }
 }
@@ -620,6 +696,19 @@ private fun statusLine(ui: UpdateUiState): String {
         " · checked ${DateUtils.getRelativeTimeSpanString(it)}"
     } ?: ""
     return status + checked
+}
+
+private fun dashboardStatusLine(ui: DashboardUiState): String {
+    val status = when (ui.status) {
+        DashboardStatus.IDLE -> "Idle"
+        DashboardStatus.LOADING -> "Loading…"
+        DashboardStatus.LIVE -> "Live · every ${ui.refreshIntervalSeconds}s"
+        DashboardStatus.ERROR -> "Error: ${ui.message ?: "unknown error"}"
+    }
+    val updated = ui.lastUpdatedEpochMs?.let {
+        " · updated ${DateUtils.getRelativeTimeSpanString(it)}"
+    } ?: ""
+    return status + updated
 }
 
 private fun wakeStatusLine(ui: WakeWordUiState): String = when (ui.status) {

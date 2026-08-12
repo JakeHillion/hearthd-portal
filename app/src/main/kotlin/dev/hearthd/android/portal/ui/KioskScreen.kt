@@ -33,6 +33,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,6 +51,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.hearthd.android.portal.R
+import dev.hearthd.android.portal.dashboard.DashboardUiState
 import dev.hearthd.android.portal.voice.VoicePhase
 import dev.hearthd.android.portal.voice.VoiceUiState
 import dev.hearthd.android.portal.wakeword.WakeWordDetection
@@ -73,6 +75,7 @@ fun KioskScreen(
     voiceUi: StateFlow<VoiceUiState>,
     micLevel: StateFlow<Float>,
     voiceEngaged: Boolean,
+    dashboard: StateFlow<DashboardUiState>,
     onOpenSettings: () -> Unit,
 ) {
     var trayVisible by remember { mutableStateOf(false) }
@@ -96,13 +99,24 @@ fun KioskScreen(
 
     val voice by voiceUi.collectAsStateWithLifecycle()
     val level by micLevel.collectAsStateWithLifecycle()
+    val dash by dashboard.collectAsStateWithLifecycle()
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Text(
-            text = stringResource(R.string.kiosk_title),
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.align(Alignment.Center),
-        )
+        // The dashboard is the background surface. A template change resets its
+        // tree (keyed by hash); a state-only refresh recomposes bound values in
+        // place. With nothing configured yet, fall back to a plain label.
+        val template = dash.template
+        if (template != null) {
+            key(dash.templateHash) {
+                template.root.Render(dash.state, Modifier.fillMaxSize())
+            }
+        } else {
+            Text(
+                text = stringResource(R.string.kiosk_title),
+                style = MaterialTheme.typography.headlineMedium,
+                modifier = Modifier.align(Alignment.Center),
+            )
+        }
 
         // Invisible hold target in the top-right corner. Nothing is drawn,
         // keeping the surface clean; a long-press opens the tray.

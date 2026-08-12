@@ -27,6 +27,8 @@ class SettingsRepository(private val context: Context) {
         val voiceEnabled = booleanPreferencesKey("voice_enabled")
         val voiceBaseUrl = stringPreferencesKey("voice_base_url")
         val voicePipeline = stringPreferencesKey("voice_pipeline")
+        val dashboardEnabled = booleanPreferencesKey("dashboard_enabled")
+        val dashboardStateUrl = stringPreferencesKey("dashboard_state_url")
     }
 
     val settings: Flow<UpdateSettings> = context.dataStore.data.map { prefs ->
@@ -80,4 +82,17 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setVoicePipeline(id: String) =
         context.dataStore.edit { it[Keys.voicePipeline] = id.trim() }
+
+    val dashboard: Flow<DashboardSettings> = context.dataStore.data.map { prefs ->
+        DashboardSettings(
+            enabled = prefs[Keys.dashboardEnabled] ?: false,
+            stateUrl = prefs[Keys.dashboardStateUrl] ?: "",
+        )
+    }
+
+    suspend fun setDashboardEnabled(value: Boolean) =
+        context.dataStore.edit { it[Keys.dashboardEnabled] = value }
+
+    suspend fun setDashboardStateUrl(url: String) =
+        context.dataStore.edit { it[Keys.dashboardStateUrl] = url.trim() }
 }

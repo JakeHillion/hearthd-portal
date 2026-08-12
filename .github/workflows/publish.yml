@@ -43,6 +43,14 @@ jobs:
       - name: Set up Magic Nix Cache
         uses: DeterminateSystems/magic-nix-cache-action@55718cd9ebf1737a061487d5ada21abf31e99a98 # main
 
+      # Enter the flake's CI dev shell once, exporting its tools (apksigner,
+      # aapt2, awscli2, …) into the environment of every later step. Keeps all
+      # CI tooling on this flake's pinned nixpkgs instead of a rolling registry.
+      - name: Enter CI dev shell
+        uses: nicknovitski/nix-develop@9be7cfb4b10451d3390a75dc18ad0465bed4932a # v1.2.1
+        with:
+          arguments: .#ci
+
       - name: Build & sign the release APK
         run: |
           out=$(nix build .#hearthd-portal --no-link --print-out-paths)
@@ -50,13 +58,13 @@ jobs:
           cp "$out"/*.apk artifacts/
           chmod -R u+w artifacts
           apk=$(ls artifacts/*.apk | head -1)
-          nix develop --command bash ci/sign-apk.sh "$apk" "$apk.signed"
+          bash ci/sign-apk.sh "$apk" "$apk.signed"
           mv "$apk.signed" "$apk"
-          nix develop --command bash ci/apk-version.sh "$apk" apk-version.env
+          bash ci/apk-version.sh "$apk" apk-version.env
 
       - name: Publish to R2
         run: |
           set -a; . ./apk-version.env; set +a
           apk=$(ls artifacts/*.apk | head -1)
           VERSION_CODE="$versionCode" VERSION_NAME="$versionName" \
-            nix shell nixpkgs#awscli2 --command bash ci/publish.sh "$apk" "${{ steps.stream.outputs.stream }}"
+            bash ci/publish.sh "$apk" "${{ steps.stream.outputs.stream }}"

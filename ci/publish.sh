@@ -10,7 +10,7 @@
 #   android/portal/<sha256>.apk   immutable, long cache
 #   android/portal/<stream>.json  mutable pointer, no-cache
 #
-# Needs `aws` on PATH (run under `nix shell nixpkgs#awscli2`). Expects:
+# Needs `aws` on PATH (provided by the `.#ci` dev shell CI enters). Expects:
 #   R2_ENDPOINT, R2_BUCKET, PUBLIC_BASE, VERSION_CODE, VERSION_NAME, GITHUB_SHA
 #   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION=auto
 #

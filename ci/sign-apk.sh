@@ -7,7 +7,7 @@
 # key decoded from GitHub secrets. This is what makes the future in-app updater
 # possible.
 #
-# Expects apksigner/zipalign on ANDROID_HOME (run under `nix develop`) and the
+# Expects apksigner/zipalign on ANDROID_HOME (run under `nix develop .#ci`) and the
 # signing material in the environment:
 #   SIGNING_KEYSTORE_BASE64    base64 of the release keystore (.jks)
 #   SIGNING_KEYSTORE_PASSWORD  keystore password

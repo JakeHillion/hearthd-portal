@@ -22,6 +22,25 @@
         jdk = pkgs.jdk17;
         version = "0.1.0";
 
+        # openWakeWord distributes its models as GitHub release assets rather
+        # than on a package registry, so they can't ride in deps.json. Fetch
+        # each by content hash instead — reproducible, and no model binaries in
+        # git. Regenerate a hash after bumping a URL with:  nix-prefetch-url <url>
+        owwBase = "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1";
+        owwModel = name: sha256: pkgs.fetchurl { url = "${owwBase}/${name}"; inherit sha256; };
+        # Staged under stable asset names (the classifiers drop their _v0.1
+        # suffix) so WakeWordModel can reference them without version churn.
+        wakeWordModels = pkgs.runCommand "openwakeword-models" { } ''
+          mkdir -p "$out"
+          # Shared feature models, used by every wake word.
+          cp ${owwModel "melspectrogram.onnx" "0vqpxdjzlyglv775r2gj6v2bllzzc0rv3768l9lm71vvic7hwaxs"} "$out/melspectrogram.onnx"
+          cp ${owwModel "embedding_model.onnx" "07sw0z9ppzvc0lfz6nbb66km0cjl01gbqjg19qfms28x1hln9lbh"} "$out/embedding_model.onnx"
+          # Pre-trained wake-word classifiers.
+          cp ${owwModel "hey_jarvis_v0.1.onnx" "1jyjw0p72wsa8dcgphqvhrqfw8w15r37wbj7d8pi6nq7c3z3r8cl"} "$out/hey_jarvis.onnx"
+          cp ${owwModel "alexa_v0.1.onnx" "0gmfzcyjhfcagwdn0ai72xfmgc8xclrdln9wks6hwrqj3nh6dxbg"} "$out/alexa.onnx"
+          cp ${owwModel "hey_mycroft_v0.1.onnx" "060z3cq2sg4992nxwvcdk8pszm7z9pf4cfqvqf4xwf0kzbl138y2"} "$out/hey_mycroft.onnx"
+        '';
+
         # Android SDK components needed to build the app. Keep these versions in
         # sync with compileSdk / build-tools in app/build.gradle.kts.
         androidComposition = pkgs.androidenv.composeAndroidPackages {
@@ -64,6 +83,15 @@
               pkg = finalAttrs.finalPackage;
               data = ./deps.json;
             };
+
+            # Stage the content-addressed openWakeWord models into the app's
+            # assets before Gradle packages them. Kept out of the source tree so
+            # no model binaries live in git (see wakeWordModels above); the
+            # matching .gitignore entry stops a local build committing them.
+            postPatch = ''
+              mkdir -p app/src/main/assets/wakeword
+              cp ${wakeWordModels}/* app/src/main/assets/wakeword/
+            '';
 
             # Point the Android Gradle Plugin at the Nix-provided SDK.
             ANDROID_HOME = sdkRoot;

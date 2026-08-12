@@ -17,6 +17,18 @@ android {
         // dirty builds fall back to these dev placeholders.
         versionCode = (project.findProperty("portal.versionCode") as String?)?.toInt() ?: 1
         versionName = (project.findProperty("portal.versionName") as String?) ?: "0.1.0"
+
+        // ONNX Runtime ships prebuilt native libraries for every ABI. The
+        // Portal is arm64, so keep only that one and spare the APK the rest.
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
+    }
+
+    // The wake-word .onnx models are read straight from assets by ONNX Runtime;
+    // leaving them uncompressed keeps that a plain mmap-friendly read.
+    androidResources {
+        noCompress += "onnx"
     }
 
     buildTypes {
@@ -55,6 +67,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
+
+    // On-device wake-word inference. The AAR bundles the native runtime, so no
+    // NDK is needed at build time (see flake.nix).
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

@@ -12,6 +12,10 @@ result-*
 *.ap_
 *.keystore
 
+# openWakeWord models are content-addressed fetches staged into assets by the
+# Nix build (see flake.nix); never commit the binaries themselves.
+app/src/main/assets/wakeword/
+
 # IDE / editors
 .idea/
 *.iml

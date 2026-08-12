@@ -1,8 +1,11 @@
 package dev.hearthd.android.portal
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -11,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -21,11 +25,24 @@ import dev.hearthd.android.portal.settings.SettingsRepository
 import dev.hearthd.android.portal.ui.KioskScreen
 import dev.hearthd.android.portal.ui.SettingsScreen
 import dev.hearthd.android.portal.update.UpdateController
+import dev.hearthd.android.portal.wakeword.WakeWordDetector
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    // Whether RECORD_AUDIO is currently granted. Re-checked in onResume so the
+    // wake-word loop reacts as soon as the operator returns from the permission
+    // dialog or the system settings.
+    private val micPermission = MutableStateFlow(false)
+
+    private val requestMic =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            micPermission.value = granted
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -34,9 +51,11 @@ class MainActivity : ComponentActivity() {
         // operator swipes from an edge, then auto-hide again.
         WindowCompat.setDecorFitsSystemWindows(window, false)
         hideSystemBars()
+        micPermission.value = hasMicPermission()
 
         val settingsRepo = SettingsRepository(applicationContext)
         val controller = UpdateController(applicationContext)
+        val wakeWord = WakeWordDetector(applicationContext)
 
         // The update loop lives here, scoped to the foreground: it only runs
         // while the app is at least STARTED and the user has opted in. Off
@@ -54,6 +73,23 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // The wake-word loop, on the same foreground-only footing as updates:
+        // the mic is opened only while opted in, permitted, and on screen.
+        // collectLatest cancels the listening session (releasing the mic) the
+        // instant settings or the permission change.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                combine(settingsRepo.wakeWord, micPermission) { s, granted -> s to granted }
+                    .collectLatest { (s, granted) ->
+                        when {
+                            !s.enabled -> wakeWord.markDisabled()
+                            !granted -> wakeWord.markNoPermission()
+                            else -> wakeWord.run(s.model, s.threshold)
+                        }
+                    }
+            }
+        }
+
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
@@ -64,14 +100,25 @@ class MainActivity : ComponentActivity() {
                         SettingsScreen(
                             settingsRepo = settingsRepo,
                             controller = controller,
+                            wakeWord = wakeWord,
+                            onRequestMicPermission = { requestMic.launch(Manifest.permission.RECORD_AUDIO) },
                             onClose = { showSettings = false },
                         )
                     } else {
-                        KioskScreen(onOpenSettings = { showSettings = true })
+                        KioskScreen(
+                            detections = wakeWord.events,
+                            onOpenSettings = { showSettings = true },
+                        )
                     }
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // The permission may have changed while we were away (dialog, settings).
+        micPermission.value = hasMicPermission()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -80,6 +127,10 @@ class MainActivity : ComponentActivity() {
         // returning to the foreground. Re-hide them whenever we regain focus.
         if (hasFocus) hideSystemBars()
     }
+
+    private fun hasMicPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
 
     private fun hideSystemBars() {
         WindowInsetsControllerCompat(window, window.decorView).apply {

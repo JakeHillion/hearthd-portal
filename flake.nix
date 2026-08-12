@@ -20,6 +20,8 @@
         };
 
         jdk = pkgs.jdk17;
+        # AGP 9.x requires Gradle >= 9.5; nixpkgs' default `gradle` is still 8.x.
+        gradle = pkgs.gradle_9;
         version = "0.1.0";
 
         # openWakeWord distributes its models as GitHub release assets rather
@@ -44,8 +46,8 @@
         # Android SDK components needed to build the app. Keep these versions in
         # sync with compileSdk / build-tools in app/build.gradle.kts.
         androidComposition = pkgs.androidenv.composeAndroidPackages {
-          platformVersions = [ "35" ];
-          buildToolsVersions = [ "35.0.0" ];
+          platformVersions = [ "36" ];
+          buildToolsVersions = [ "36.0.0" ];
           includeEmulator = false;
           includeSystemImages = false;
           includeNDK = false;
@@ -73,13 +75,13 @@
             src = ./.;
 
             nativeBuildInputs = [
-              pkgs.gradle
+              gradle
               jdk
             ];
 
             # Reproducible Gradle dependency resolution. Regenerate deps.json with:
             #   nix run .#update-deps
-            mitmCache = pkgs.gradle.fetchDeps {
+            mitmCache = gradle.fetchDeps {
               pkg = finalAttrs.finalPackage;
               data = ./deps.json;
             };
@@ -133,7 +135,7 @@
               # AGP downloads a prebuilt aapt2 from Maven that can't run on NixOS
               # (wrong ELF interpreter). Use the autopatched aapt2 from the
               # Nix-provided build-tools instead.
-              "-Pandroid.aapt2FromMavenOverride=${sdkRoot}/build-tools/35.0.0/aapt2"
+              "-Pandroid.aapt2FromMavenOverride=${sdkRoot}/build-tools/36.0.0/aapt2"
             ]
             # Stamp the version from the flake's own git input, so no source
             # mutation or --impure is needed. Only the APK build gets it; the
@@ -211,7 +213,7 @@
 
         devShells.default = pkgs.mkShell {
           packages = [
-            pkgs.gradle
+            gradle
             jdk
             androidSdk
             pkgs.android-tools # adb, for sideloading

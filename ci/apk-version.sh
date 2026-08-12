@@ -9,7 +9,7 @@ set -euo pipefail
 
 apk="${1:?usage: apk-version.sh <apk> <out-env>}"
 out="${2:?usage: apk-version.sh <apk> <out-env>}"
-aapt2="${ANDROID_HOME:?ANDROID_HOME not set}/build-tools/35.0.0/aapt2"
+aapt2="${ANDROID_HOME:?ANDROID_HOME not set}/build-tools/36.0.0/aapt2"
 
 line="$("$aapt2" dump badging "$apk" | grep '^package:')"
 version_code="$(sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" <<<"$line")"

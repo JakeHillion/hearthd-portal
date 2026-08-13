@@ -76,7 +76,7 @@ dependencies {
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.29.0")
 
     // WebSocket + HTTP client for the Home Assistant voice pipeline (Alpha).
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp:5.4.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

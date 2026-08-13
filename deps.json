@@ -977,11 +977,11 @@
    "jar": "sha256-dXv+kGGTuLZR553CbNZ9a1XQdwos37A4FZFQT3edSnY=",
    "pom": "sha256-eEY5mzXHzWQqmzoADD4tYtBOs3pFR7aTPMixi8wvCGs="
   },
-  "com/microsoft/onnxruntime#onnxruntime-android/1.20.0": {
-   "pom": "sha256-i3Jn3eFdQbvNxZdMNQdP70nOXQWbOd1GwbIGo/kl/Dk="
+  "com/microsoft/onnxruntime#onnxruntime-android/1.29.0": {
+   "pom": "sha256-vMkZw1G8n2DX3pc6fSDcbHMjO4hdtafK2ViXL7GR9jU="
   },
-  "com/microsoft/onnxruntime/onnxruntime-android/1.20.0/onnxruntime-android-1.20.0": {
-   "aar": "sha256-B6j3HviQr+2MYIelYiDm1VikkoBCdu4t18t/YmIkICc="
+  "com/microsoft/onnxruntime/onnxruntime-android/1.29.0/onnxruntime-android-1.29.0": {
+   "aar": "sha256-6XVAynj+Nvb+IBP4KENBT7hDtsdoH7BGRMul4UBmYt0="
   },
   "com/squareup#javapoet/1.13.0": {
    "jar": "sha256-THUX6EinGzbQadErs79Gpw/UzaMQXYIrDtLhnAC2kpE=",

@@ -8,6 +8,7 @@ import dev.hearthd.android.portal.dashboard.widgets.CarouselWidget
 import dev.hearthd.android.portal.dashboard.widgets.ClockWidget
 import dev.hearthd.android.portal.dashboard.widgets.GridWidget
 import dev.hearthd.android.portal.dashboard.widgets.LightGroupWidget
+import dev.hearthd.android.portal.dashboard.widgets.PhotoScreensaverWidget
 import dev.hearthd.android.portal.dashboard.widgets.WeatherWidget
 import org.json.JSONObject
 
@@ -50,6 +51,7 @@ fun parseWidget(obj: JSONObject): Widget = when (val type = obj.optString("type"
     "grid" -> GridWidget.parse(obj)
     "weather" -> WeatherWidget.parse(obj)
     "light_group" -> LightGroupWidget.parse(obj)
+    "photo_screensaver" -> PhotoScreensaverWidget.parse(obj)
     else -> UnknownWidget(type)
 }
 

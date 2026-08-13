@@ -12,9 +12,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -31,6 +33,8 @@ import dev.hearthd.android.portal.settings.SettingsRepository
 import dev.hearthd.android.portal.settings.VoiceSettings
 import dev.hearthd.android.portal.ui.KioskScreen
 import dev.hearthd.android.portal.ui.SettingsScreen
+import dev.hearthd.android.portal.ui.theme.portalTypography
+import dev.hearthd.android.portal.ui.theme.robotoFlexFamily
 import dev.hearthd.android.portal.update.UpdateController
 import dev.hearthd.android.portal.voice.HomeAssistantAssist
 import dev.hearthd.android.portal.voice.HomeAssistantAuth
@@ -153,7 +157,12 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            MaterialTheme {
+            // Roboto Flex from assets, on a kiosk-scaled type scale (see
+            // ui/theme/Typography.kt). Built once; falls back to the system font
+            // if the asset wasn't staged (local builds without the Nix step).
+            val assets = LocalContext.current.assets
+            val typography = remember { portalTypography(robotoFlexFamily(assets)) }
+            MaterialTheme(typography = typography) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     // The kiosk surface is the root; Settings is reachable from
                     // its swipe-up tray and returns here on close.

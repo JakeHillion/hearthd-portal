@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import coil3.compose.AsyncImagePainter
 import dev.hearthd.android.portal.dashboard.Binding
 import dev.hearthd.android.portal.dashboard.ScreensaverScaffold
 import dev.hearthd.android.portal.dashboard.Widget
@@ -42,24 +43,36 @@ import kotlin.math.roundToInt
 
 /**
  * A digital photo frame that doubles as the screensaver: the resting state is a
- * slideshow of [photos] with the date, time, and weather overlaid; a touch
- * reveals [child] (the dashboard) for [dwellSeconds] before the photos return.
- * It wraps its child so it can nest under the ambient screensaver — the photos
- * rest by day, and a dark room lets the ambient clock take over above it.
+ * frame of [photos] with the date, time, and weather overlaid; a touch reveals
+ * [child] (the dashboard) for [dwellSeconds] before the photos return. It wraps
+ * its child so it can nest under the ambient screensaver — the photos rest by
+ * day, and a dark room lets the ambient clock take over above it.
  *
- * Everything dynamic comes from state: [photos] is a slot holding an array of
- * image URLs, [weather] the same `{temp_c, condition}` object the weather widget
- * reads, and [timezone] a live IANA id. The overlay's layout and formatting are
- * fixed. With no photos configured it falls back to the overlay on black, still
- * dimming the dashboard while idle.
+ * Two [mode]s share this frame, differing only in how the image is chosen:
+ *  - `slideshow` (default): [photos] is a list of image URLs, cycled every
+ *    [rotateSeconds].
+ *  - `solar`: [photos] is a list of `metadata.json` URLs, one per dynamic
+ *    wallpaper collection. Each day at [rolloverHour] local a collection is
+ *    picked at random (held until the next rollover), and within it the frame
+ *    tracking the live sun position from [sun] is shown — a wallpaper that moves
+ *    with the real sun. [rotateSeconds] is unused here.
+ *
+ * Everything dynamic comes from state: [photos] is a slot, [weather] the same
+ * `{temp_c, condition}` object the weather widget reads, [timezone] a live IANA
+ * id, and [sun] a `{elevation, azimuth}` object (degrees). The overlay's layout
+ * and formatting are fixed. With no photos configured it falls back to the
+ * overlay on black, still dimming the dashboard while idle.
  */
 data class PhotoScreensaverWidget(
     val child: Widget,
     val photos: Binding,
     val timezone: Binding,
     val weather: Binding,
+    val sun: Binding,
+    val mode: String,
     val dwellSeconds: Long,
     val rotateSeconds: Long,
+    val rolloverHour: Int,
 ) : Widget {
     @Composable
     override fun Render(state: JSONObject, modifier: Modifier) {
@@ -76,31 +89,8 @@ data class PhotoScreensaverWidget(
 
     @Composable
     private fun PhotoFrame(state: JSONObject) {
-        val urls = resolveUrls(state)
-
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-            if (urls.isNotEmpty()) {
-                var index by remember(urls) { mutableIntStateOf(0) }
-                LaunchedEffect(urls, rotateSeconds) {
-                    if (urls.size <= 1) return@LaunchedEffect
-                    while (true) {
-                        delay(rotateSeconds * 1_000L)
-                        index = (index + 1) % urls.size
-                    }
-                }
-                Crossfade(
-                    targetState = index.coerceIn(urls.indices),
-                    animationSpec = tween(PHOTO_FADE_MILLIS),
-                    label = "photo",
-                ) { i ->
-                    AsyncImage(
-                        model = urls[i],
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-            }
+            if (mode == MODE_SOLAR) SolarLayer(state) else SlideshowLayer(state)
 
             // A soft bottom scrim keeps the white overlay legible over a bright
             // photo without darkening the whole frame.
@@ -117,6 +107,101 @@ data class PhotoScreensaverWidget(
 
             Overlay(state)
         }
+    }
+
+    /** The default frame: cycle through the image URLs in [photos]. */
+    @Composable
+    private fun SlideshowLayer(state: JSONObject) {
+        val urls = resolveUrls(state)
+        if (urls.isEmpty()) return
+
+        var index by remember(urls) { mutableIntStateOf(0) }
+        LaunchedEffect(urls, rotateSeconds) {
+            if (urls.size <= 1) return@LaunchedEffect
+            while (true) {
+                delay(rotateSeconds * 1_000L)
+                index = (index + 1) % urls.size
+            }
+        }
+        Crossfade(
+            targetState = index.coerceIn(urls.indices),
+            animationSpec = tween(PHOTO_FADE_MILLIS),
+            label = "photo",
+        ) { i ->
+            PhotoImage(urls[i])
+        }
+    }
+
+    /**
+     * The solar frame: pick today's collection from [photos] (metadata URLs),
+     * then show the frame nearest the live sun. Falls back to the collection's
+     * first frame until a sun position arrives, and to bare black on an empty or
+     * unreachable collection — either way the overlay still draws over the top.
+     */
+    @Composable
+    private fun SolarLayer(state: JSONObject) {
+        val metadataUrls = resolveUrls(state)
+        if (metadataUrls.isEmpty()) return
+
+        val zoneId = timezone.resolveString(state)
+        val zone = remember(zoneId) {
+            runCatching { ZoneId.of(zoneId) }.getOrDefault(ZoneId.systemDefault())
+        }
+        val index = rememberDailyIndex(zone, rolloverHour, metadataUrls.size)
+        val collection by rememberSolarCollection(metadataUrls[index.coerceIn(metadataUrls.indices)])
+        val frames = collection?.frames.orEmpty()
+        if (frames.isEmpty()) return
+
+        val sunData = sun.resolveObject(state)
+        val elevation = sunData?.optDouble("elevation")?.takeUnless { it.isNaN() }
+        val azimuth = sunData?.optDouble("azimuth")?.takeUnless { it.isNaN() }
+        val frame = if (elevation != null && azimuth != null) {
+            frames.nearestTo(elevation, azimuth)
+        } else {
+            frames.first()
+        }
+
+        SolarImage(frame?.url)
+    }
+
+    /**
+     * Show [desiredUrl] with a straight swap — no crossfade, since the frames of
+     * a solar day are deliberately quiet transitions — but never blank the frame
+     * to get there. The last image known to have loaded stays on top until the
+     * desired one has actually loaded underneath; a failed load simply leaves the
+     * old image in place. Both layers share Coil's cache, so the top one costs
+     * nothing once it catches up.
+     */
+    @Composable
+    private fun SolarImage(desiredUrl: String?) {
+        var committedUrl by remember { mutableStateOf<String?>(null) }
+        Box(modifier = Modifier.fillMaxSize()) {
+            // Underneath: laid out and drawn, so it truly loads. Commit only on
+            // success, which is what promotes it to the visible layer above.
+            if (desiredUrl != null) {
+                AsyncImage(
+                    model = desiredUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    onState = { state ->
+                        if (state is AsyncImagePainter.State.Success) committedUrl = desiredUrl
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            committedUrl?.let { PhotoImage(it) }
+        }
+    }
+
+    /** One full-bleed, cropped image — the shared look of both frames. */
+    @Composable
+    private fun PhotoImage(url: String) {
+        AsyncImage(
+            model = url,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 
     /** Date and time bottom-left, weather to its right. Fixed layout. */
@@ -181,13 +266,18 @@ data class PhotoScreensaverWidget(
     }
 
     companion object {
+        const val MODE_SOLAR = "solar"
+
         fun parse(obj: JSONObject) = PhotoScreensaverWidget(
             child = parseWidget(obj.getJSONObject("child")),
             photos = Binding.of(obj.opt("photos")),
             timezone = Binding.of(obj.opt("timezone")),
             weather = Binding.of(obj.opt("weather")),
+            sun = Binding.of(obj.opt("sun")),
+            mode = obj.optString("mode").ifBlank { "slideshow" },
             dwellSeconds = obj.optLong("dwell_seconds", 20L).coerceAtLeast(1L),
             rotateSeconds = obj.optLong("rotate_seconds", 30L).coerceAtLeast(1L),
+            rolloverHour = obj.optInt("rollover_hour", 4).coerceIn(0, 23),
         )
     }
 }

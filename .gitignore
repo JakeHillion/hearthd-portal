@@ -16,6 +16,10 @@ result-*
 # Nix build (see flake.nix); never commit the binaries themselves.
 app/src/main/assets/wakeword/
 
+# Roboto Flex is likewise staged into assets by the Nix build (from nixpkgs'
+# google-fonts); never commit the font binary itself.
+app/src/main/assets/fonts/
+
 # IDE / editors
 .idea/
 *.iml

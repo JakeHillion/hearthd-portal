@@ -43,6 +43,12 @@
           cp ${owwModel "hey_mycroft_v0.1.onnx" "060z3cq2sg4992nxwvcdk8pszm7z9pf4cfqvqf4xwf0kzbl138y2"} "$out/hey_mycroft.onnx"
         '';
 
+        # Roboto Flex (variable, OFL) is the app's UI font, staged into assets by
+        # the build like the wake-word models — no font binary in git. Sourced
+        # from nixpkgs' google-fonts (pinned by the nixpkgs input, so nixpkgs owns
+        # updates); the `fonts` filter installs just this one family.
+        robotoFlex = pkgs.google-fonts.override { fonts = [ "RobotoFlex" ]; };
+
         # Android SDK components needed to build the app. Keep these versions in
         # sync with compileSdk / build-tools in app/build.gradle.kts.
         androidComposition = pkgs.androidenv.composeAndroidPackages {
@@ -93,6 +99,13 @@
             postPatch = ''
               mkdir -p app/src/main/assets/wakeword
               cp ${wakeWordModels}/* app/src/main/assets/wakeword/
+
+              # Stage Roboto Flex under a stable, code-friendly name (the upstream
+              # file carries its axis list in brackets). Loaded at runtime from
+              # this path; see ui/theme/Typography.kt.
+              mkdir -p app/src/main/assets/fonts
+              cp ${robotoFlex}/share/fonts/truetype/RobotoFlex*.ttf \
+                app/src/main/assets/fonts/roboto_flex.ttf
             '';
 
             # Point the Android Gradle Plugin at the Nix-provided SDK.

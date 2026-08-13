@@ -46,7 +46,7 @@
         # Android SDK components needed to build the app. Keep these versions in
         # sync with compileSdk / build-tools in app/build.gradle.kts.
         androidComposition = pkgs.androidenv.composeAndroidPackages {
-          platformVersions = [ "36" ];
+          platformVersions = [ "37" ];
           buildToolsVersions = [ "36.0.0" ];
           includeEmulator = false;
           includeSystemImages = false;

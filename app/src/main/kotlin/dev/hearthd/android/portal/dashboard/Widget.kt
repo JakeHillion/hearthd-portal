@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import dev.hearthd.android.portal.dashboard.widgets.AmbientScreensaverWidget
 import dev.hearthd.android.portal.dashboard.widgets.CarouselWidget
 import dev.hearthd.android.portal.dashboard.widgets.ClockWidget
 import dev.hearthd.android.portal.dashboard.widgets.GridWidget
@@ -46,6 +47,7 @@ data class Template(val version: Int, val root: Widget) {
 
 /** The single dispatch point that turns a `{"type": …}` object into a [Widget]. */
 fun parseWidget(obj: JSONObject): Widget = when (val type = obj.optString("type")) {
+    "ambient_screensaver" -> AmbientScreensaverWidget.parse(obj)
     "carousel" -> CarouselWidget.parse(obj)
     "clock" -> ClockWidget.parse(obj)
     "grid" -> GridWidget.parse(obj)

@@ -11,6 +11,8 @@
     <string name="device_model">Model</string>
     <string name="device_android">Android</string>
     <string name="device_app_version">Portal version</string>
+    <string name="device_display">Display</string>
+    <string name="device_display_value">%1$d × %2$d · %3$d dpi</string>
     <string name="device_settings_summary">Opens the device\'s native Android settings — the way in to Developer options to re-enable ADB.</string>
     <string name="device_open_settings">Open Android settings</string>
     <string name="update_auto">Automatic updates</string>

@@ -75,8 +75,15 @@ dependencies {
     // NDK is needed at build time (see flake.nix).
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.29.0")
 
-    // WebSocket + HTTP client for the Home Assistant voice pipeline (Alpha).
+    // WebSocket + HTTP client for the Home Assistant voice pipeline (Alpha),
+    // and the transport Coil loads photo-frame images over (below).
     implementation("com.squareup.okhttp3:okhttp:5.4.0")
+
+    // Image loading for the photo-frame screensaver. coil-network-okhttp adds
+    // network URL support on the singleton loader and rides the okhttp above, so
+    // no ImageLoader wiring is needed.
+    implementation("io.coil-kt.coil3:coil-compose:3.5.0")
+    implementation("io.coil-kt.coil3:coil-network-okhttp:3.5.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

@@ -550,6 +550,18 @@ private fun DeviceInfoPane() {
     }
 
     val context = LocalContext.current
+    // Screen geometry, straight off the display the app is running on. In the
+    // kiosk we're always full-screen, so these pixels are the panel's pixels.
+    val metrics = context.resources.displayMetrics
+    // Physical dots-per-inch reported by the panel, not the density bucket.
+    // x and y are near-identical on real hardware; average and round to one.
+    val physicalDpi = ((metrics.xdpi + metrics.ydpi) / 2f).roundToInt()
+    val displayValue = stringResource(
+        R.string.device_display_value,
+        metrics.widthPixels,
+        metrics.heightPixels,
+        physicalDpi,
+    )
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -561,6 +573,7 @@ private fun DeviceInfoPane() {
 
         InfoRow(stringResource(R.string.device_model), "${Build.MANUFACTURER} ${Build.MODEL}")
         InfoRow(stringResource(R.string.device_android), "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+        InfoRow(stringResource(R.string.device_display), displayValue)
         InfoRow(
             stringResource(R.string.device_app_version),
             stringResource(R.string.version_label, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),

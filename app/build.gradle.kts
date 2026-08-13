@@ -73,7 +73,7 @@ dependencies {
 
     // On-device wake-word inference. The AAR bundles the native runtime, so no
     // NDK is needed at build time (see flake.nix).
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.29.0")
 
     // WebSocket + HTTP client for the Home Assistant voice pipeline (Alpha).
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

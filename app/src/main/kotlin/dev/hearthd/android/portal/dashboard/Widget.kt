@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import dev.hearthd.android.portal.dashboard.widgets.CarouselWidget
 import dev.hearthd.android.portal.dashboard.widgets.ClockWidget
+import dev.hearthd.android.portal.dashboard.widgets.EnvironmentWidget
 import dev.hearthd.android.portal.dashboard.widgets.GridWidget
 import dev.hearthd.android.portal.dashboard.widgets.LightGroupWidget
 import dev.hearthd.android.portal.dashboard.widgets.PhotoScreensaverWidget
@@ -48,6 +49,7 @@ data class Template(val version: Int, val root: Widget) {
 fun parseWidget(obj: JSONObject): Widget = when (val type = obj.optString("type")) {
     "carousel" -> CarouselWidget.parse(obj)
     "clock" -> ClockWidget.parse(obj)
+    "environment" -> EnvironmentWidget.parse(obj)
     "grid" -> GridWidget.parse(obj)
     "weather" -> WeatherWidget.parse(obj)
     "light_group" -> LightGroupWidget.parse(obj)

@@ -49,6 +49,14 @@ fun Binding.resolveString(state: JSONObject): String? = when (val v = resolve(st
 /** Resolve to a JSON object (the shape widgets like weather read fields from), or null. */
 fun Binding.resolveObject(state: JSONObject): JSONObject? = resolve(state) as? JSONObject
 
+/** Resolve and coerce to a Double, or null when absent or non-numeric. */
+fun Binding.resolveDouble(state: JSONObject): Double? = when (val v = resolve(state)) {
+    null, JSONObject.NULL -> null
+    is Number -> v.toDouble()
+    is String -> v.toDoubleOrNull()
+    else -> null
+}
+
 /** Walk a dotted path through nested objects. Returns null on any missing segment. */
 private fun resolvePath(state: JSONObject, path: String): Any? {
     var current: Any? = state

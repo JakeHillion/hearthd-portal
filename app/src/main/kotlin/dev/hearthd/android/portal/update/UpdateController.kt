@@ -48,8 +48,15 @@ class UpdateController(context: Context) {
             }
             _state.update { it.copy(status = UpdateStatus.DOWNLOADING) }
             val apk = updater.download(manifest)
-            _state.update { it.copy(status = UpdateStatus.INSTALLING) }
-            updater.install(apk)
+            try {
+                _state.update { it.copy(status = UpdateStatus.INSTALLING) }
+                updater.install(apk)
+            } finally {
+                // The installer session has its own copy once committed, so the
+                // cached download is dead weight either way — drop it so the
+                // cache doesn't accumulate an APK per update.
+                apk.delete()
+            }
         } catch (e: Exception) {
             _state.update { it.copy(status = UpdateStatus.FAILED, message = e.message) }
         }

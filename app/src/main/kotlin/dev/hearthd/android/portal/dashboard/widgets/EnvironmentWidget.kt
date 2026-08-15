@@ -22,10 +22,11 @@ import org.json.JSONObject
 import kotlin.math.roundToInt
 
 /**
- * Room environment: an optional [temperature] and an optional [humidity], each a
- * slot fed from state (a bare number, e.g. `{"$": "sensors.lounge.temp_c"}`).
- * The two are independent — the widget shows whichever resolve to a number, and
- * a muted dash when neither does, so a template can carry just one.
+ * Room environment: an optional [name] heading over an optional [temperature] and
+ * an optional [humidity], each reading a slot fed from state (a bare number, e.g.
+ * `{"$": "sensors.lounge.temp_c"}`). The two are independent — the widget shows
+ * whichever resolve to a number, and a muted dash when neither does, so a template
+ * can carry just one.
  *
  * Each reading is tinted by its own value so the room reads at a glance rather
  * than needing the number parsed: temperature runs cool-blue → warm-red across a
@@ -34,6 +35,7 @@ import kotlin.math.roundToInt
  * carries the signal.
  */
 data class EnvironmentWidget(
+    val name: String,
     val temperature: Binding?,
     val humidity: Binding?,
 ) : Widget {
@@ -52,6 +54,14 @@ data class EnvironmentWidget(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterVertically),
             ) {
+                if (name.isNotBlank()) {
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                }
                 if (tempC == null && humidityPct == null) {
                     Text(
                         text = "—",
@@ -72,6 +82,7 @@ data class EnvironmentWidget(
 
     companion object {
         fun parse(obj: JSONObject) = EnvironmentWidget(
+            name = obj.optString("name"),
             temperature = obj.opt("temperature")?.let { Binding.of(it) },
             humidity = obj.opt("humidity")?.let { Binding.of(it) },
         )

@@ -43,6 +43,10 @@ class Updater(private val context: Context) {
 
     /** Downloads the manifest's APK into the cache and verifies its sha256. */
     suspend fun download(manifest: UpdateManifest): File = withContext(Dispatchers.IO) {
+        // Drop any previously downloaded APKs (installed ones we never cleaned
+        // up, plus partial/failed downloads) before fetching a new one, so the
+        // cache can't grow without bound and we have room to stage the install.
+        cleanDownloads()
         val out = File(context.cacheDir, "update-${manifest.sha256}.apk")
         URL(manifest.apkUrl).openStream().use { input ->
             out.outputStream().use { input.copyTo(it) }
@@ -59,6 +63,9 @@ class Updater(private val context: Context) {
         val installer = context.packageManager.packageInstaller
         val params =
             PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+        // Tell the installer up front how much it needs so it can reserve the
+        // space (and fail cleanly if it can't) rather than allocating blindly.
+        params.setSize(apk.length())
         val sessionId = installer.createSession(params)
         installer.openSession(sessionId).use { session ->
             session.openWrite("apk", 0, apk.length()).use { out ->
@@ -76,6 +83,13 @@ class Updater(private val context: Context) {
             val pending = PendingIntent.getBroadcast(context, sessionId, statusIntent, flags)
             session.commit(pending.intentSender)
         }
+    }
+
+    /** Removes every downloaded update APK from the cache. */
+    fun cleanDownloads() {
+        context.cacheDir
+            .listFiles { file -> file.name.startsWith("update-") && file.name.endsWith(".apk") }
+            ?.forEach { it.delete() }
     }
 
     fun isDeviceOwner(): Boolean {

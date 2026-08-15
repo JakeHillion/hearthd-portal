@@ -19,7 +19,6 @@ import dev.hearthd.android.portal.dashboard.Binding
 import dev.hearthd.android.portal.dashboard.Widget
 import dev.hearthd.android.portal.dashboard.resolveDouble
 import org.json.JSONObject
-import kotlin.math.roundToInt
 
 /**
  * Room environment: an optional [name] heading over an optional [temperature] and
@@ -71,10 +70,10 @@ data class EnvironmentWidget(
                     return@Column
                 }
                 tempC?.let {
-                    Reading("🌡", "${it.roundToInt()}°", "Temperature", temperatureColor(it))
+                    Reading("🌡", "$it°", "Temperature", temperatureColor(it))
                 }
                 humidityPct?.let {
-                    Reading("💧", "${it.roundToInt()}%", "Humidity", humidityColor(it))
+                    Reading("💧", "$it%", "Humidity", humidityColor(it))
                 }
             }
         }

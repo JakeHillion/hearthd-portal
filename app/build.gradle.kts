@@ -32,6 +32,16 @@ android {
         noCompress += "onnx"
     }
 
+    // The bundled snapclient (jniLibs/…/libsnapclient.so) is a native executable
+    // we exec() at runtime, so it must be unpacked to a real file in
+    // nativeLibraryDir. Legacy packaging extracts jniLibs on install; the modern
+    // default runs them from the APK, which can't be exec'd.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false

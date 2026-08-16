@@ -31,6 +31,7 @@ import dev.hearthd.android.portal.dashboard.LocalLightCommander
 import dev.hearthd.android.portal.settings.HearthdSettings
 import dev.hearthd.android.portal.settings.SettingsRepository
 import dev.hearthd.android.portal.settings.VoiceSettings
+import dev.hearthd.android.portal.snapcast.SnapcastController
 import dev.hearthd.android.portal.ui.KioskScreen
 import dev.hearthd.android.portal.ui.SettingsScreen
 import dev.hearthd.android.portal.ui.theme.portalTypography
@@ -78,6 +79,7 @@ class MainActivity : ComponentActivity() {
         val wakeWord = WakeWordDetector(applicationContext)
         val voice = VoiceController(lifecycleScope)
         val dashboard = DashboardController()
+        val snapcast = SnapcastController(applicationContext)
         // Light control (write path): commands go straight to hearthd, then nudge
         // a dashboard re-poll so the change is confirmed without waiting a cycle.
         val lightCommander = LightController(
@@ -141,6 +143,22 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Snapcast client: when enabled + configured, spawn the
+        // bundled snapclient against the server. Foreground-only and opt-in like
+        // the loops above — collectLatest tears the process down (releasing audio)
+        // the instant settings change or the app leaves the screen.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                settingsRepo.snapcast.collectLatest { s ->
+                    if (!s.enabled || !s.configured) {
+                        snapcast.markDisabled()
+                        return@collectLatest
+                    }
+                    snapcast.run(s)
+                }
+            }
+        }
+
         // Voice (Alpha): when enabled + configured, a wake-word detection starts
         // a Home Assistant turn, streaming the mic frames the detector publishes.
         // collectLatest rebuilds the assistant when the HA settings change.
@@ -173,6 +191,7 @@ class MainActivity : ComponentActivity() {
                             controller = controller,
                             wakeWord = wakeWord,
                             dashboard = dashboard,
+                            snapcast = snapcast,
                             onRequestMicPermission = { requestMic.launch(Manifest.permission.RECORD_AUDIO) },
                             onTestVoice = ::testVoiceConnection,
                             onClose = { showSettings = false },

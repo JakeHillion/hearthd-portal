@@ -31,6 +31,9 @@ class SettingsRepository(private val context: Context) {
         val dashboardStateUrl = stringPreferencesKey("dashboard_state_url")
         val hearthdEnabled = booleanPreferencesKey("hearthd_enabled")
         val hearthdBaseUrl = stringPreferencesKey("hearthd_base_url")
+        val snapcastEnabled = booleanPreferencesKey("snapcast_enabled")
+        val snapcastHost = stringPreferencesKey("snapcast_host")
+        val snapcastPort = intPreferencesKey("snapcast_port")
     }
 
     val settings: Flow<UpdateSettings> = context.dataStore.data.map { prefs ->
@@ -110,4 +113,21 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setHearthdBaseUrl(url: String) =
         context.dataStore.edit { it[Keys.hearthdBaseUrl] = url.trim() }
+
+    val snapcast: Flow<SnapcastSettings> = context.dataStore.data.map { prefs ->
+        SnapcastSettings(
+            enabled = prefs[Keys.snapcastEnabled] ?: false,
+            host = prefs[Keys.snapcastHost] ?: "",
+            port = prefs[Keys.snapcastPort] ?: SnapcastSettings.DEFAULT_PORT,
+        )
+    }
+
+    suspend fun setSnapcastEnabled(value: Boolean) =
+        context.dataStore.edit { it[Keys.snapcastEnabled] = value }
+
+    suspend fun setSnapcastHost(host: String) =
+        context.dataStore.edit { it[Keys.snapcastHost] = host.trim() }
+
+    suspend fun setSnapcastPort(port: Int) =
+        context.dataStore.edit { it[Keys.snapcastPort] = port }
 }

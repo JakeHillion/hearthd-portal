@@ -54,6 +54,10 @@ import dev.hearthd.android.portal.settings.DashboardSettings
 import dev.hearthd.android.portal.settings.HearthdSettings
 import dev.hearthd.android.portal.settings.INTERVAL_STOPS
 import dev.hearthd.android.portal.settings.SettingsRepository
+import dev.hearthd.android.portal.settings.SnapcastSettings
+import dev.hearthd.android.portal.snapcast.SnapcastController
+import dev.hearthd.android.portal.snapcast.SnapcastStatus
+import dev.hearthd.android.portal.snapcast.SnapcastUiState
 import dev.hearthd.android.portal.settings.THRESHOLD_RANGE
 import dev.hearthd.android.portal.settings.UpdateSettings
 import dev.hearthd.android.portal.settings.VoiceSettings
@@ -71,7 +75,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import kotlin.math.roundToInt
 
 /** Sections shown in the settings navigation rail. */
-private enum class SettingsSection { DISPLAY, UPDATES, ASSISTANT, DEVICE_INFO, SENSORS }
+private enum class SettingsSection { DISPLAY, AUDIO, UPDATES, ASSISTANT, DEVICE_INFO, SENSORS }
 
 /** Root settings screen: a navigation rail with sections. */
 @Composable
@@ -80,6 +84,7 @@ fun SettingsScreen(
     controller: UpdateController,
     wakeWord: WakeWordDetector,
     dashboard: DashboardController,
+    snapcast: SnapcastController,
     onRequestMicPermission: () -> Unit,
     onTestVoice: suspend (VoiceSettings) -> String,
     onClose: () -> Unit,
@@ -92,6 +97,8 @@ fun SettingsScreen(
     val dashboardSettings by settingsRepo.dashboard.collectAsStateWithLifecycle(initialValue = DashboardSettings())
     val dashboardUi by dashboard.state.collectAsStateWithLifecycle()
     val hearthdSettings by settingsRepo.hearthd.collectAsStateWithLifecycle(initialValue = HearthdSettings())
+    val snapcastSettings by settingsRepo.snapcast.collectAsStateWithLifecycle(initialValue = SnapcastSettings())
+    val snapcastUi by snapcast.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var section by rememberSaveable { mutableStateOf(SettingsSection.DISPLAY) }
 
@@ -110,6 +117,12 @@ fun SettingsScreen(
                 onClick = { section = SettingsSection.DISPLAY },
                 icon = { Text("▦") },
                 label = { Text(stringResource(R.string.settings_display)) },
+            )
+            NavigationRailItem(
+                selected = section == SettingsSection.AUDIO,
+                onClick = { section = SettingsSection.AUDIO },
+                icon = { Text("🔊") },
+                label = { Text(stringResource(R.string.settings_audio)) },
             )
             NavigationRailItem(
                 selected = section == SettingsSection.UPDATES,
@@ -149,6 +162,13 @@ fun SettingsScreen(
                 onRefreshNow = { url -> scope.launch { dashboard.poll(url) } },
                 onHearthdEnabledChange = { scope.launch { settingsRepo.setHearthdEnabled(it) } },
                 onHearthdBaseUrlChange = { scope.launch { settingsRepo.setHearthdBaseUrl(it) } },
+            )
+            SettingsSection.AUDIO -> AudioPane(
+                settings = snapcastSettings,
+                ui = snapcastUi,
+                onEnabledChange = { scope.launch { settingsRepo.setSnapcastEnabled(it) } },
+                onHostChange = { scope.launch { settingsRepo.setSnapcastHost(it) } },
+                onPortChange = { scope.launch { settingsRepo.setSnapcastPort(it) } },
             )
             SettingsSection.UPDATES -> UpdatesPane(
                 settings = settings,
@@ -260,6 +280,79 @@ private fun DisplayPane(
             placeholder = { Text("https://hearthd.example.com") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun AudioPane(
+    settings: SnapcastSettings,
+    ui: SnapcastUiState,
+    onEnabledChange: (Boolean) -> Unit,
+    onHostChange: (String) -> Unit,
+    onPortChange: (Int) -> Unit,
+) {
+    // Local field state so typing doesn't fight DataStore round-trips; each valid
+    // edit is still persisted immediately.
+    var host by rememberSaveable { mutableStateOf(settings.host) }
+    var port by rememberSaveable { mutableStateOf(settings.port.toString()) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+    ) {
+        Text(stringResource(R.string.settings_audio), style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.height(16.dp))
+
+        // Opt-in toggle.
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.snapcast_enable), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    stringResource(R.string.snapcast_enable_summary),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Switch(checked = settings.enabled, onCheckedChange = onEnabledChange)
+        }
+        Spacer(Modifier.height(24.dp))
+
+        // Server host + port. Nothing connects until a host is set.
+        OutlinedTextField(
+            value = host,
+            onValueChange = { host = it; onHostChange(it) },
+            label = { Text(stringResource(R.string.snapcast_host)) },
+            placeholder = { Text("192.168.1.10") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(16.dp))
+        OutlinedTextField(
+            value = port,
+            onValueChange = { new ->
+                // Keep only digits; persist when it's a plausible port.
+                port = new.filter { it.isDigit() }.take(5)
+                port.toIntOrNull()?.let { if (it in 1..65535) onPortChange(it) }
+            },
+            label = { Text(stringResource(R.string.snapcast_port)) },
+            placeholder = { Text(SnapcastSettings.DEFAULT_PORT.toString()) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(20.dp))
+
+        // Live status of the client subprocess.
+        Text(snapcastStatusLine(ui), style = MaterialTheme.typography.bodyMedium)
+        ui.lastLine?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(it, style = MaterialTheme.typography.bodySmall)
+        }
+        Spacer(Modifier.height(16.dp))
+        Text(
+            stringResource(R.string.snapcast_note),
+            style = MaterialTheme.typography.bodySmall,
         )
     }
 }
@@ -626,6 +719,7 @@ private fun LicensesPane(onBack: () -> Unit) {
         Spacer(Modifier.height(12.dp))
         Text(stringResource(R.string.licenses_intro), style = MaterialTheme.typography.bodyMedium)
 
+        val resources = LocalContext.current.resources
         THIRD_PARTY_LICENSES.forEach { entry ->
             Spacer(Modifier.height(24.dp))
             Text(entry.name, style = MaterialTheme.typography.titleMedium)
@@ -637,6 +731,13 @@ private fun LicensesPane(onBack: () -> Unit) {
             )
             Spacer(Modifier.height(8.dp))
             Text(entry.notice, style = MaterialTheme.typography.bodySmall)
+            entry.fullTextRes?.let { res ->
+                val fullText = remember(res) {
+                    resources.openRawResource(res).bufferedReader().use { it.readText() }
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(fullText, style = MaterialTheme.typography.bodySmall)
+            }
         }
     }
 }
@@ -760,6 +861,13 @@ private fun dashboardStatusLine(ui: DashboardUiState): String {
     return status + updated
 }
 
+private fun snapcastStatusLine(ui: SnapcastUiState): String = when (ui.status) {
+    SnapcastStatus.DISABLED -> "Disabled"
+    SnapcastStatus.STARTING -> "Starting… (${ui.server})"
+    SnapcastStatus.RUNNING -> "Playing from ${ui.server}"
+    SnapcastStatus.ERROR -> "Error: ${ui.message ?: "unknown error"}"
+}
+
 private fun wakeStatusLine(ui: WakeWordUiState): String = when (ui.status) {
     WakeWordStatus.DISABLED -> "Disabled"
     WakeWordStatus.NO_PERMISSION -> "Microphone permission needed"
@@ -774,11 +882,18 @@ private data class LicenseEntry(
     val copyright: String,
     val license: String,
     val notice: String,
+    // Raw resource holding the component's full license text, rendered verbatim
+    // below the notice. Used for copyleft licenses (GPL) that require a complete
+    // copy to travel with the binary, not just a summary.
+    val fullTextRes: Int? = null,
 )
 
 /**
- * Third-party components bundled into the app. openWakeWord's models are the
- * only non-permissive item: CC BY-NC-SA 4.0, used unmodified and non-commercially.
+ * Third-party components bundled into the app. Two are not permissive: the
+ * openWakeWord models (CC BY-NC-SA 4.0, used unmodified and non-commercially) and
+ * the Snapcast client (GPL-3.0-or-later). The Snapcast binary runs as a separate
+ * subprocess and ships with its full license text and Corresponding Source, so
+ * the copyleft stays contained to that binary and doesn't reach the app.
  */
 private val THIRD_PARTY_LICENSES = listOf(
     LicenseEntry(
@@ -815,6 +930,40 @@ private val THIRD_PARTY_LICENSES = listOf(
             "LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING " +
             "FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER " +
             "DEALINGS IN THE SOFTWARE.",
+    ),
+    LicenseEntry(
+        name = "Snapcast (snapclient)",
+        copyright = "© 2014–2025 Johannes Pohl and the Snapcast contributors",
+        license = "GPL-3.0-or-later",
+        notice = "The Snapcast client is bundled as a native binary and run as a " +
+            "separate subprocess for multi-room audio. It is free software: you may " +
+            "redistribute it and/or modify it under the terms of the GNU General " +
+            "Public License, version 3, or (at your option) any later version, with " +
+            "NO WARRANTY.\n\n" +
+            "It is cross-built unmodified from the upstream source pinned in this " +
+            "app's Nix build (see snapclient-android.nix and flake.nix); that pinned " +
+            "source together with those build scripts is its Corresponding Source, " +
+            "and this app's build is publicly reproducible from it.\n\n" +
+            "Upstream project: https://github.com/snapcast/snapcast\n\n" +
+            "The complete license text follows.",
+        fullTextRes = R.raw.gpl_3_0,
+    ),
+    LicenseEntry(
+        name = "Snapcast client — bundled libraries",
+        copyright = "© the Xiph.Org Foundation, Google LLC, the libsoxr authors, " +
+            "and the Boost authors",
+        license = "BSD-3-Clause · Apache-2.0 · LGPL-2.1-or-later · BSL-1.0",
+        notice = "The snapclient binary statically links several open-source " +
+            "libraries:\n\n" +
+            "• FLAC, libogg, Opus, and the Tremor Vorbis decoder — BSD-3-Clause " +
+            "(© the Xiph.Org Foundation)\n" +
+            "• oboe — Apache License 2.0 (© Google LLC)\n" +
+            "• libsoxr (SoX Resampler) — LGPL-2.1-or-later\n" +
+            "• Boost (Asio, header-only) — Boost Software License 1.0\n\n" +
+            "Each library's own source and license travels in the reproducible " +
+            "Corresponding Source described above. Because that complete source is " +
+            "available, the LGPL relink requirement for libsoxr is satisfied even " +
+            "though it is statically linked.",
     ),
     LicenseEntry(
         name = "Jetpack Compose & AndroidX",

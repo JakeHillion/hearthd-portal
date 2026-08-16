@@ -49,6 +49,12 @@
         # updates); the `fonts` filter installs just this one family.
         robotoFlex = pkgs.google-fonts.override { fonts = [ "RobotoFlex" ]; };
 
+        # snapcast's snapclient, cross-built for aarch64-android as a
+        # self-contained libsnapclient.so. Staged into the app's jniLibs like the
+        # assets above (kept out of git), and exec'd at runtime as a subprocess.
+        # Source rides the nixpkgs pin, so version bumps come with nixpkgs.
+        snapclientAndroid = import ./snapclient-android.nix { inherit pkgs; };
+
         # Android SDK components needed to build the app. Keep these versions in
         # sync with compileSdk / build-tools in app/build.gradle.kts.
         androidComposition = pkgs.androidenv.composeAndroidPackages {
@@ -106,6 +112,12 @@
               mkdir -p app/src/main/assets/fonts
               cp ${robotoFlex}/share/fonts/truetype/RobotoFlex*.ttf \
                 app/src/main/assets/fonts/roboto_flex.ttf
+
+              # Stage the cross-built snapclient into jniLibs; AGP packages it
+              # into the APK, and the app extracts + execs it (see SnapcastController).
+              mkdir -p app/src/main/jniLibs/arm64-v8a
+              cp ${snapclientAndroid}/jniLibs/arm64-v8a/libsnapclient.so \
+                app/src/main/jniLibs/arm64-v8a/libsnapclient.so
             '';
 
             # Point the Android Gradle Plugin at the Nix-provided SDK.

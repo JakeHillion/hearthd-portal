@@ -29,6 +29,12 @@
     <string name="hearthd_enable">Control lights via hearthd</string>
     <string name="hearthd_enable_summary">Let dashboard light widgets send toggle and brightness commands. Off by default; no commands are sent until enabled and a URL is set.</string>
     <string name="hearthd_base_url">hearthd URL</string>
+    <string name="settings_audio">Audio</string>
+    <string name="snapcast_enable">Snapcast client</string>
+    <string name="snapcast_enable_summary">Play synchronized multi-room audio from a Snapcast server. Off by default; nothing connects until enabled and a server is set.</string>
+    <string name="snapcast_host">Server host</string>
+    <string name="snapcast_port">Server port</string>
+    <string name="snapcast_note">This integration is early and subject to change. Plain TCP only — no TLS or authentication.</string>
     <string name="settings_wake_word">Wake word</string>
     <string name="settings_assistant">Assistant</string>
     <string name="wake_enable">Wake-word detection</string>
